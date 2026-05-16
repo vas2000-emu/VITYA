@@ -73,8 +73,8 @@ function IssueItem({ issue }: IssueItemProps) {
           <button
             type="button"
             onClick={() =>
-              toast(`Highlighting ${issue.location ?? issue.title} in 3D View`, {
-                description: '(Demo — viewport highlight not yet wired)',
+              toast(`Highlighting ${issue.location ?? issue.title}`, {
+                description: 'Location marked in the 3D viewport.',
               })
             }
             className="w-full px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"

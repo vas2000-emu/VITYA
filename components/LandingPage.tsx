@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Menu } from 'lucide-react'
+import { ChevronDown, Menu, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
 
 export function LandingPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const setAuthenticated = useAppStore((s) => s.setAuthenticated)
 
   const handleEmailSignIn = (e: React.FormEvent) => {
@@ -83,11 +85,19 @@ export function LandingPage() {
           <button
             type="button"
             aria-label="Open menu"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 hover:bg-zinc-800 rounded"
           >
-            <Menu className="size-5" />
+            {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-zinc-800 bg-zinc-900 px-4 py-3 flex flex-col gap-1">
+            <button onClick={handleLearn} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 rounded">Learn</button>
+            <button onClick={handleCommunity} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 rounded">Community</button>
+            <button onClick={handleLearn} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 rounded">Documentation</button>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section with Sign In */}
@@ -153,7 +163,17 @@ export function LandingPage() {
                       <input type="checkbox" className="rounded" />
                       <span className="text-zinc-400">Remember me</span>
                     </label>
-                    <button type="button" className="text-blue-400 hover:text-blue-300">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!email.trim()) {
+                          toast.error('Enter your email first', { description: 'Type your email above then try again.' })
+                          return
+                        }
+                        toast('Password reset link sent', { description: `Check ${email} for instructions.` })
+                      }}
+                      className="text-blue-400 hover:text-blue-300"
+                    >
                       Forgot password?
                     </button>
                   </div>

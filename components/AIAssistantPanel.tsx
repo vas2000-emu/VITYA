@@ -134,7 +134,11 @@ function SuggestionCard({ suggestion, onAccept, onReject, onPreview }: Suggestio
             </div>
             <p className="text-sm text-zinc-400">{suggestion.description}</p>
           </div>
-          <button className="p-1 hover:bg-zinc-800 rounded">
+          <button
+            className="p-1 hover:bg-zinc-800 rounded"
+            title="Dismiss suggestion"
+            onClick={() => onReject(suggestion.id)}
+          >
             <MoreHorizontal className="size-4" />
           </button>
         </div>
