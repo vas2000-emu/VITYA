@@ -10,11 +10,12 @@ import {
   Settings,
   GitCompare,
   AlertTriangle,
+  LogOut,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 
 export function Toolbar() {
-  const { setShowDiff, showManufacturing, setShowManufacturing, setRightPanel } = useAppStore()
+  const { setShowDiff, showManufacturing, setShowManufacturing, setRightPanel, logout } = useAppStore()
 
   const handleToggleManufacturing = () => {
     const newState = !showManufacturing
@@ -88,6 +89,17 @@ export function Toolbar() {
         <button className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded">
           <Save className="size-4" />
           <span className="text-sm">Save</span>
+        </button>
+
+        <div className="h-6 w-px bg-zinc-700" />
+
+        <button
+          onClick={logout}
+          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 rounded"
+          title="Logout"
+        >
+          <LogOut className="size-4" />
+          <span className="text-sm">Logout</span>
         </button>
       </div>
     </header>

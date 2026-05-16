@@ -116,6 +116,11 @@ const initialIssues: ManufacturingIssue[] = [
 ]
 
 interface AppState {
+  // Auth state
+  isAuthenticated: boolean
+  setAuthenticated: (auth: boolean) => void
+  logout: () => void
+
   // Feature state
   features: Feature[]
   selectedFeature: string | null
@@ -153,6 +158,11 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
+  // Auth state
+  isAuthenticated: false,
+  setAuthenticated: (auth) => set({ isAuthenticated: auth }),
+  logout: () => set({ isAuthenticated: false }),
+
   // Feature state
   features: initialFeatures,
   selectedFeature: 'extrude2',
