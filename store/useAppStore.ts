@@ -1,37 +1,46 @@
 import { create } from 'zustand'
-import type { Feature, AISuggestion, Parameter, ManufacturingIssue, RightPanelType } from '@/lib/types'
+import type {
+  Feature,
+  AISuggestion,
+  Parameter,
+  ManufacturingIssue,
+  RightPanelType,
+  ChatMessage,
+} from '@/lib/types'
 
-// Mock data
+// Mock data — feature names kept in plain English so non-CAD users can
+// read the toolbar without translating CAD jargon ("Extrude 1" -> "Base
+// Body", "Hole 1" -> "Mounting Hole", etc).
 const initialFeatures: Feature[] = [
   {
     id: 'origin',
     name: 'Origin',
     type: 'origin',
     children: [
-      { id: 'top', name: 'Top', type: 'plane' },
-      { id: 'front', name: 'Front', type: 'plane' },
-      { id: 'right', name: 'Right', type: 'plane' },
+      { id: 'top', name: 'Top Plane', type: 'plane' },
+      { id: 'front', name: 'Front Plane', type: 'plane' },
+      { id: 'right', name: 'Right Plane', type: 'plane' },
     ],
   },
   { id: 'sketch1', name: 'Sketch 1', type: 'sketch' },
-  { id: 'extrude1', name: 'Extrude 1', type: 'extrude' },
   { id: 'sketch2', name: 'Sketch 2', type: 'sketch' },
-  { id: 'extrude2', name: 'Extrude 2', type: 'extrude' },
-  { id: 'fillet1', name: 'Fillet 1', type: 'fillet' },
-  { id: 'hole1', name: 'Hole 1', type: 'hole' },
+  { id: 'baseBody', name: 'Base Body', type: 'extrude' },
+  { id: 'mountingHole', name: 'Mounting Hole', type: 'hole' },
+  { id: 'edgeRounds', name: 'Edge Rounds', type: 'fillet' },
 ]
 
 const initialSuggestions: AISuggestion[] = [
   {
     id: '1',
-    title: 'Add fillet to sharp edges',
-    description: 'Apply 2mm fillet to all sharp edges to improve manufacturability and reduce stress concentration.',
+    title: 'Add fillets to sharp edges',
+    description:
+      'Round the sharp top edges with a 2 mm radius so the part is easier to mold and the corners do not concentrate stress.',
     operations: [
       {
         id: 'op1',
         type: 'add',
-        feature: 'Fillet 2',
-        description: 'Create fillet on top edges',
+        feature: 'Edge Rounds',
+        description: 'Add 2 mm fillets to the top edges',
         parameters: { radius: 2, edges: ['edge1', 'edge2', 'edge3', 'edge4'] },
       },
     ],
@@ -39,25 +48,26 @@ const initialSuggestions: AISuggestion[] = [
   },
   {
     id: '2',
-    title: 'Optimize wall thickness',
-    description: 'Increase wall thickness from 1.5mm to 2.5mm to meet injection molding requirements.',
+    title: 'Thicken the side walls',
+    description:
+      'Bump the wall thickness from 1.5 mm up to 2.5 mm so the molder can fill the cavity reliably without sink marks.',
     operations: [
       {
         id: 'op2',
         type: 'modify',
-        feature: 'Extrude 1',
-        description: 'Update extrude depth: 25mm → 30mm',
+        feature: 'Base Body',
+        description: 'Increase body depth: 25 mm to 30 mm',
         parameters: { depth: 30 },
       },
       {
         id: 'op3',
         type: 'modify',
-        feature: 'Sketch 1',
-        description: 'Update constraint: wall = 2.5mm',
+        feature: 'Base Body',
+        description: 'Set wall thickness to 2.5 mm',
         parameters: { wall_thickness: 2.5 },
       },
     ],
-    status: 'previewing',
+    status: 'pending',
   },
 ]
 
@@ -116,6 +126,11 @@ const initialIssues: ManufacturingIssue[] = [
 ]
 
 interface AppState {
+  // Auth (mock for the demo — no real OAuth, just a sign-in gate)
+  isAuthenticated: boolean
+  setAuthenticated: (auth: boolean) => void
+  logout: () => void
+
   // Feature state
   features: Feature[]
   selectedFeature: string | null
@@ -150,12 +165,24 @@ interface AppState {
   setLeftCollapsed: (collapsed: boolean) => void
   rightCollapsed: boolean
   setRightCollapsed: (collapsed: boolean) => void
+
+  // AI chat panel state
+  chatMessages: ChatMessage[]
+  isAiThinking: boolean
+  addChatMessage: (msg: ChatMessage) => void
+  setAiThinking: (thinking: boolean) => void
+  clearChat: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
+  // Auth state
+  isAuthenticated: false,
+  setAuthenticated: (auth) => set({ isAuthenticated: auth }),
+  logout: () => set({ isAuthenticated: false }),
+
   // Feature state
   features: initialFeatures,
-  selectedFeature: 'extrude2',
+  selectedFeature: null,
   selectFeature: (id) => set({ selectedFeature: id }),
 
   // AI suggestions state
@@ -172,11 +199,16 @@ export const useAppStore = create<AppState>((set) => ({
         s.id === id ? { ...s, status: 'rejected' } : s
       ),
     })),
+  // Mutually exclusive: previewing one suggestion drops any other that
+  // was in the previewing state back to pending. Keeps the Markup
+  // ribbon honest — only one suggestion is ever "active" at a time.
   previewSuggestion: (id) =>
     set((state) => ({
-      aiSuggestions: state.aiSuggestions.map((s) =>
-        s.id === id ? { ...s, status: 'previewing' } : s
-      ),
+      aiSuggestions: state.aiSuggestions.map((s) => {
+        if (s.id === id) return { ...s, status: 'previewing' }
+        if (s.status === 'previewing') return { ...s, status: 'pending' }
+        return s
+      }),
     })),
 
   // Parameters state
@@ -212,4 +244,11 @@ export const useAppStore = create<AppState>((set) => ({
   setLeftCollapsed: (collapsed) => set({ leftCollapsed: collapsed }),
   rightCollapsed: false,
   setRightCollapsed: (collapsed) => set({ rightCollapsed: collapsed }),
+
+  chatMessages: [],
+  isAiThinking: false,
+  addChatMessage: (msg) =>
+    set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+  setAiThinking: (thinking) => set({ isAiThinking: thinking }),
+  clearChat: () => set({ chatMessages: [], isAiThinking: false }),
 }))

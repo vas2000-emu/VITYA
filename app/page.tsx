@@ -7,10 +7,12 @@ import { ParameterPanel } from '@/components/ParameterPanel'
 import { ManufacturingPanel } from '@/components/ManufacturingPanel'
 import { Toolbar } from '@/components/Toolbar'
 import { GeometryDiff } from '@/components/GeometryDiff'
+import { LandingPage } from '@/components/LandingPage'
 import { useAppStore } from '@/store/useAppStore'
 
 export default function CADPage() {
   const {
+    isAuthenticated,
     rightPanel,
     setRightPanel,
     leftCollapsed,
@@ -18,6 +20,10 @@ export default function CADPage() {
     showManufacturing,
     setShowManufacturing,
   } = useAppStore()
+
+  if (!isAuthenticated) {
+    return <LandingPage />
+  }
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100">
