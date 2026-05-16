@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { STLLoader } from 'three-stdlib'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { useResultsStore } from '@/store/useResultsStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
@@ -34,10 +35,19 @@ export function Part() {
 
   const fixedIssueIds = useResultsStore((s) => s.fixedIssueIds)
   const pendingFixId = useResultsStore((s) => s.pendingFixId)
+  const selectIssue = useResultsStore((s) => s.selectIssue)
 
   const proceduralGeom = useMemo(() => getPartGeometry(currentPartId), [currentPartId])
   const [uploadedGeom, setUploadedGeom] = useState<THREE.BufferGeometry | null>(null)
   const meshRef = useRef<THREE.Mesh>(null)
+
+  // Hover state — derived from raycast pointer events. We store the
+  // hovered issue + a world-space point so Tooltip3D can render via
+  // <Html> in the right spot.
+  const [hover, setHover] = useState<{
+    issue: MoldIssue
+    point: [number, number, number]
+  } | null>(null)
 
   useEffect(() => {
     if (!uploadedSTL) {
@@ -176,19 +186,106 @@ export function Part() {
     colorAttr.needsUpdate = true
   })
 
+  // Hover handler: raycast hit gives us a world-space point; we look it
+  // up against each issue's region AABB. First match wins. Cursor turns
+  // into a pointer to telegraph clickability.
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!heatmapEnabled || issues.length === 0) {
+      if (hover) setHover(null)
+      return
+    }
+    const p = e.point
+    for (const issue of issues) {
+      const r = issue.region
+      if (!r) continue
+      if (
+        p.x >= r.min[0] && p.x <= r.max[0] &&
+        p.y >= r.min[1] && p.y <= r.max[1] &&
+        p.z >= r.min[2] && p.z <= r.max[2]
+      ) {
+        if (hover?.issue.id !== issue.id) {
+          setHover({ issue, point: [p.x, p.y, p.z] })
+        }
+        document.body.style.cursor = 'pointer'
+        return
+      }
+    }
+    if (hover) setHover(null)
+    document.body.style.cursor = ''
+  }
+  const handlePointerOut = () => {
+    setHover(null)
+    document.body.style.cursor = ''
+  }
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    if (!hover) return
+    e.stopPropagation()
+    selectIssue(hover.issue.id)
+  }
+
   return (
-    <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
-      <meshPhysicalMaterial
-        vertexColors
-        color={showManufacturing ? '#fca5a5' : '#ffffff'}
-        roughness={0.42}
-        metalness={0.18}
-        clearcoat={0.5}
-        clearcoatRoughness={0.35}
-        sheen={0.2}
-        sheenColor="#ffffff"
-        envMapIntensity={0.9}
-      />
-    </mesh>
+    <>
+      <mesh
+        ref={meshRef}
+        geometry={geometry}
+        castShadow
+        receiveShadow
+        onPointerMove={handlePointerMove}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
+      >
+        <meshPhysicalMaterial
+          vertexColors
+          color={showManufacturing ? '#fca5a5' : '#ffffff'}
+          roughness={0.42}
+          metalness={0.18}
+          clearcoat={0.5}
+          clearcoatRoughness={0.35}
+          sheen={0.2}
+          sheenColor="#ffffff"
+          envMapIntensity={0.9}
+        />
+      </mesh>
+      {hover && <IssueTooltip issue={hover.issue} point={hover.point} />}
+    </>
+  )
+}
+
+function IssueTooltip({
+  issue,
+  point,
+}: {
+  issue: MoldIssue
+  point: [number, number, number]
+}) {
+  const severityClass =
+    issue.severity === 'high'
+      ? 'border-rose-500/60 bg-rose-500/15 text-rose-200'
+      : issue.severity === 'medium'
+        ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+        : 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
+
+  return (
+    <Html
+      position={point}
+      center
+      distanceFactor={180}
+      style={{ pointerEvents: 'none' }}
+    >
+      <div
+        className={`min-w-[180px] max-w-[240px] rounded-md border bg-zinc-950/90 backdrop-blur px-3 py-2 text-[11px] shadow-lg ${severityClass}`}
+      >
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="font-medium text-zinc-100 truncate">{issue.title}</span>
+          <span className="text-[9px] uppercase tracking-wider opacity-80">
+            {issue.severity}
+          </span>
+        </div>
+        <div className="text-zinc-300 leading-snug">{issue.recommendation}</div>
+        <div className="mt-1 text-[9px] uppercase tracking-wider text-zinc-500">
+          Click to focus in panel
+        </div>
+      </div>
+    </Html>
   )
 }
