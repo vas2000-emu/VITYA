@@ -1,3 +1,5 @@
+'use client'
+
 import { Triangle } from 'lucide-react'
 import { AnalysisPageLayout } from '@/components/analysis/AnalysisPageLayout'
 import { IssueAnalysisDetail } from '@/components/analysis/IssueAnalysisDetail'

@@ -1,3 +1,5 @@
+'use client'
+
 import { Factory, MapPin, Clock, Phone } from 'lucide-react'
 import {
   AnalysisPageLayout,

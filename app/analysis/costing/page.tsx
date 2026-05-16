@@ -1,3 +1,5 @@
+'use client'
+
 import { DollarSign, TrendingUp, TrendingDown } from 'lucide-react'
 import {
   AnalysisPageLayout,
