@@ -8,6 +8,14 @@ import { CameraController } from './CameraController'
 import { Part } from './Part'
 import { WebGLContextLossOverlay } from './WebGLContextLossOverlay'
 
+// Set to false to silence the diagnostic logging once we've nailed the
+// black-screen-after-restore issue.
+const DEBUG_GL = true
+
+function gllog(...args: unknown[]) {
+  if (DEBUG_GL) console.log('[GL]', new Date().toISOString().slice(11, 23), ...args)
+}
+
 /**
  * Root r3f scene. Lighting + ground + axes live here; the actual part
  * geometry is in <Part />. Camera presets are driven from the store via
@@ -19,20 +27,25 @@ export function Scene() {
   const [remountKey, setRemountKey] = useState(0)
   const recoveryTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const restoreExt = useRef<WEBGL_lose_context | null>(null)
+  // Count loss / restore events so we can spot rapid oscillation.
+  const lossCount = useRef(0)
+  const restoreCount = useRef(0)
 
   const clearRecoveryTimers = () => {
+    if (recoveryTimers.current.length > 0) {
+      gllog(`clearing ${recoveryTimers.current.length} pending recovery timers`)
+    }
     for (const t of recoveryTimers.current) clearTimeout(t)
     recoveryTimers.current = []
   }
 
   const forceRestart = () => {
-    // Soft path: WEBGL_lose_context.restoreContext usually rebuilds in
-    // place. Fall back to a hard React remount (Canvas key bump) which
-    // tears down the GL context entirely.
+    gllog('manual forceRestart() invoked')
     try {
       restoreExt.current?.loseContext()
       setTimeout(() => restoreExt.current?.restoreContext(), 50)
-    } catch {
+    } catch (err) {
+      gllog('forceRestart soft path threw, bumping remountKey', err)
       setRemountKey((k) => k + 1)
     }
   }
@@ -45,11 +58,25 @@ export function Scene() {
       dpr={[1, 2]}
       camera={{ position: [220, 160, 220], fov: 45, near: 10, far: 1500 }}
       gl={{ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: false }}
-      onCreated={({ gl }) => {
+      onCreated={({ gl, scene, camera, size }) => {
+        gllog('Canvas onCreated', {
+          remountKey,
+          size: `${size.width}x${size.height}`,
+          drawingBufferSize: `${gl.domElement.width}x${gl.domElement.height}`,
+          rendererInfo: gl.info.render,
+        })
+
         const canvas = gl.domElement
         restoreExt.current = gl.getContext().getExtension('WEBGL_lose_context')
+        gllog('WEBGL_lose_context extension', restoreExt.current ? 'available' : 'NOT AVAILABLE')
+
         canvas.addEventListener('webglcontextlost', (e) => {
           e.preventDefault()
+          lossCount.current += 1
+          gllog(`webglcontextlost #${lossCount.current}`, {
+            statusMessage: (e as WebGLContextEvent).statusMessage,
+          })
+
           // Try to recover several times with staggered retries before
           // escalating. Browsers vary on when they grant restoreContext()
           // (some immediately, some only after the page settles), so
@@ -59,17 +86,48 @@ export function Scene() {
           // at 8s.
           clearRecoveryTimers()
           recoveryTimers.current.push(
-            setTimeout(() => restoreExt.current?.restoreContext(), 0),
-            setTimeout(() => restoreExt.current?.restoreContext(), 250),
-            setTimeout(() => restoreExt.current?.restoreContext(), 1000),
-            setTimeout(() => restoreExt.current?.restoreContext(), 3000),
-            setTimeout(() => setRemountKey((k) => k + 1), 5000),
-            setTimeout(() => setLost(true), 8000),
+            setTimeout(() => {
+              gllog('retry restoreContext @ 0ms')
+              restoreExt.current?.restoreContext()
+            }, 0),
+            setTimeout(() => {
+              gllog('retry restoreContext @ 250ms')
+              restoreExt.current?.restoreContext()
+            }, 250),
+            setTimeout(() => {
+              gllog('retry restoreContext @ 1000ms')
+              restoreExt.current?.restoreContext()
+            }, 1000),
+            setTimeout(() => {
+              gllog('retry restoreContext @ 3000ms')
+              restoreExt.current?.restoreContext()
+            }, 3000),
+            setTimeout(() => {
+              gllog('5s elapsed without restore → hard-remount via Canvas key bump')
+              setRemountKey((k) => k + 1)
+            }, 5000),
+            setTimeout(() => {
+              gllog('8s elapsed → showing recovery overlay')
+              setLost(true)
+            }, 8000),
           )
         })
+
         canvas.addEventListener('webglcontextrestored', () => {
+          restoreCount.current += 1
+          gllog(`webglcontextrestored #${restoreCount.current}`, {
+            sceneChildren: scene.children.length,
+            cameraPos: camera.position.toArray().map((n) => Math.round(n)),
+          })
           clearRecoveryTimers()
           setLost(false)
+          // KEY FIX FOR BLACK-SCREEN-AFTER-RESTORE:
+          // Some browsers (esp. Chrome on integrated GPUs) restore the
+          // GL context but Three.js's existing WebGLRenderer has stale
+          // GPU resource pointers and never repaints. Bumping the
+          // Canvas key tears r3f down and rebuilds — guaranteed clean.
+          gllog('bumping remountKey to force r3f rebuild post-restore')
+          setRemountKey((k) => k + 1)
         })
       }}
     >
