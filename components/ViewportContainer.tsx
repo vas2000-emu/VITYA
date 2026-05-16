@@ -54,6 +54,8 @@ function findFeature(features: Feature[], id: string | null): Feature | null {
   return null
 }
 
+type Tool = 'rotate' | 'pan'
+
 export function ViewportContainer() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -61,6 +63,12 @@ export function ViewportContainer() {
   const [activeView, setActiveView] = useState<ViewName | null>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [lastPos, setLastPos] = useState({ x: 0, y: 0 })
+  // Viewport tool / zoom / pan / grid state — all driven by the right-
+  // side icon row in the viewport header.
+  const [tool, setTool] = useState<Tool>('rotate')
+  const [scale, setScale] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [showGrid, setShowGrid] = useState(true)
   const { showManufacturing, selectedFeature, selectFeature, features } =
     useAppStore()
 
@@ -104,14 +112,23 @@ export function ViewportContainer() {
     ctx.fillStyle = '#0a0a0a'
     ctx.fillRect(0, 0, width, height)
 
-    drawGrid(ctx, width, height)
+    if (showGrid) drawGrid(ctx, width, height, pan)
     drawAxes(ctx, width, height)
-    draw3DPart(ctx, width, height, rotation, showManufacturing, !!selectedFeature)
+    draw3DPart(
+      ctx,
+      width,
+      height,
+      rotation,
+      showManufacturing,
+      !!selectedFeature,
+      scale,
+      pan,
+    )
 
     if (showManufacturing) {
       drawManufacturingAnalysis(ctx, width, height)
     }
-  }, [rotation, showManufacturing, selectedFeature])
+  }, [rotation, showManufacturing, selectedFeature, scale, pan, showGrid])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -141,13 +158,24 @@ export function ViewportContainer() {
     if (!isDragging) return
     const dx = e.clientX - lastPos.x
     const dy = e.clientY - lastPos.y
-    setRotation({
-      x: rotation.x + dy * 0.5,
-      y: rotation.y + dx * 0.5,
-    })
+    if (tool === 'pan') {
+      setPan((p) => ({ x: p.x + dx, y: p.y + dy }))
+    } else {
+      setRotation({
+        x: rotation.x + dy * 0.5,
+        y: rotation.y + dx * 0.5,
+      })
+      // Manual rotate no longer matches any named view preset.
+      if (activeView !== null) setActiveView(null)
+    }
     setLastPos({ x: e.clientX, y: e.clientY })
-    // Manual drag no longer matches any named view preset.
-    if (activeView !== null) setActiveView(null)
+  }
+
+  const zoomIn = () => setScale((s) => Math.min(s * 1.2, 4))
+  const zoomOut = () => setScale((s) => Math.max(s / 1.2, 0.3))
+  const fitView = () => {
+    setScale(1)
+    setPan({ x: 0, y: 0 })
   }
 
   const handleMouseUp = () => {
@@ -181,22 +209,52 @@ export function ViewportContainer() {
           ))}
         </div>
         <div className="flex gap-1">
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Pan">
+          <button
+            onClick={() => setTool('pan')}
+            className={`p-1.5 rounded ${
+              tool === 'pan' ? 'bg-blue-600 text-white' : 'hover:bg-zinc-800'
+            }`}
+            title="Pan — drag to translate the view"
+          >
             <Move className="size-4" />
           </button>
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Rotate">
+          <button
+            onClick={() => setTool('rotate')}
+            className={`p-1.5 rounded ${
+              tool === 'rotate' ? 'bg-blue-600 text-white' : 'hover:bg-zinc-800'
+            }`}
+            title="Rotate — drag to orbit the view"
+          >
             <RotateCw className="size-4" />
           </button>
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Zoom In">
+          <button
+            onClick={zoomIn}
+            className="p-1.5 hover:bg-zinc-800 rounded"
+            title="Zoom in"
+          >
             <ZoomIn className="size-4" />
           </button>
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Zoom Out">
+          <button
+            onClick={zoomOut}
+            className="p-1.5 hover:bg-zinc-800 rounded"
+            title="Zoom out"
+          >
             <ZoomOut className="size-4" />
           </button>
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Fit">
+          <button
+            onClick={fitView}
+            className="p-1.5 hover:bg-zinc-800 rounded"
+            title="Fit view (reset zoom + pan)"
+          >
             <Maximize2 className="size-4" />
           </button>
-          <button className="p-1.5 hover:bg-zinc-800 rounded" title="Grid">
+          <button
+            onClick={() => setShowGrid((g) => !g)}
+            className={`p-1.5 rounded ${
+              showGrid ? 'bg-zinc-800 text-blue-300' : 'hover:bg-zinc-800'
+            }`}
+            title={showGrid ? 'Hide grid' : 'Show grid'}
+          >
             <Grid3x3 className="size-4" />
           </button>
         </div>
@@ -235,10 +293,11 @@ export function ViewportContainer() {
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   width: number,
-  height: number
+  height: number,
+  pan: { x: number; y: number } = { x: 0, y: 0 },
 ) {
-  const centerX = width / 2
-  const centerY = height / 2
+  const centerX = width / 2 + pan.x
+  const centerY = height / 2 + pan.y
   const gridSize = 40
   const gridExtent = 10
 
@@ -308,10 +367,12 @@ function draw3DPart(
   height: number,
   rot: { x: number; y: number },
   showManufacturing: boolean,
-  highlightSelected: boolean
+  highlightSelected: boolean,
+  zoom: number = 1,
+  pan: { x: number; y: number } = { x: 0, y: 0 },
 ) {
-  const centerX = width / 2
-  const centerY = height / 2 - 20
+  const centerX = width / 2 + pan.x
+  const centerY = height / 2 - 20 + pan.y
 
   const rad = (deg: number) => (deg * Math.PI) / 180
   const rotX = rad(rot.x)
@@ -323,10 +384,10 @@ function draw3DPart(
     let tempX = x * Math.cos(rotY) - tempZ * Math.sin(rotY)
     tempZ = x * Math.sin(rotY) + tempZ * Math.cos(rotY)
 
-    const scale = 2.5
+    const baseScale = 2.5 * zoom
     return {
-      x: centerX + tempX * scale,
-      y: centerY - tempY * scale,
+      x: centerX + tempX * baseScale,
+      y: centerY - tempY * baseScale,
       z: tempZ,
     }
   }
