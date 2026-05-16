@@ -1,19 +1,14 @@
 'use client'
 
 import { Cpu, Loader2 } from 'lucide-react'
-import { useResultsStore } from '@/store/useResultsStore'
-
-const PHASES = [
-  'Parsing STEP geometry',
-  'Detecting features (holes, bosses, ribs)',
-  'Checking draft angles and undercuts',
-  'Querying Michigan supplier readiness',
-  'Generating recommendations',
-]
+import { useResultsStore, LOADING_PHASES } from '@/store/useResultsStore'
 
 export function LoadingScreen() {
   const { loadingPhase } = useResultsStore()
-  const currentIndex = PHASES.indexOf(loadingPhase)
+  const currentIndex = Math.max(
+    0,
+    (LOADING_PHASES as readonly string[]).indexOf(loadingPhase),
+  )
 
   return (
     <div className="min-h-[calc(100vh-49px)] flex items-center justify-center bg-zinc-950 px-6">
@@ -29,7 +24,7 @@ export function LoadingScreen() {
         </div>
 
         <ul className="space-y-2">
-          {PHASES.map((phase, i) => {
+          {LOADING_PHASES.map((phase, i) => {
             const isDone = currentIndex > i
             const isActive = currentIndex === i
             return (
@@ -62,9 +57,7 @@ export function LoadingScreen() {
           <div
             className="h-full bg-blue-500 transition-[width] duration-500 ease-out"
             style={{
-              width: `${
-                ((currentIndex < 0 ? 0 : currentIndex + 1) / PHASES.length) * 100
-              }%`,
+              width: `${((currentIndex + 1) / LOADING_PHASES.length) * 100}%`,
             }}
           />
         </div>

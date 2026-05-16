@@ -94,7 +94,14 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
 
 export function FeatureTree() {
   const [searchQuery, setSearchQuery] = useState('')
-  const { features, leftCollapsed, setLeftCollapsed } = useAppStore()
+  const {
+    features,
+    selectedFeature,
+    leftCollapsed,
+    setLeftCollapsed,
+    addFeature,
+    removeFeature,
+  } = useAppStore()
 
   if (leftCollapsed) {
     return (
@@ -138,13 +145,27 @@ export function FeatureTree() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
         <span className="text-sm font-medium">Features ({features.length})</span>
         <div className="flex gap-1">
-          <button className="p-1 hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            onClick={() => addFeature()}
+            className="p-1 hover:bg-zinc-800 rounded"
+            title="Add feature"
+            aria-label="Add feature"
+          >
             <Plus className="size-4" />
           </button>
-          <button className="p-1 hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            onClick={() => selectedFeature && removeFeature(selectedFeature)}
+            disabled={!selectedFeature}
+            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+            title={selectedFeature ? 'Remove selected feature' : 'Select a feature first'}
+            aria-label="Remove selected feature"
+          >
             <Minus className="size-4" />
           </button>
           <button
+            type="button"
             onClick={() => setLeftCollapsed(true)}
             className="p-1 hover:bg-zinc-800 rounded"
             title="Collapse Features"

@@ -76,7 +76,11 @@ export function ResultsDashboard() {
           </button>
 
           <button
-            onClick={() => void simulateAnalysis()}
+            type="button"
+            onClick={async () => {
+              if (loading) return
+              await simulateAnalysis()
+            }}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
             title="Re-run analysis on the part"

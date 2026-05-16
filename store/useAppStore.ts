@@ -135,6 +135,8 @@ interface AppState {
   features: Feature[]
   selectedFeature: string | null
   selectFeature: (id: string | null) => void
+  addFeature: (feature?: Partial<Feature>) => void
+  removeFeature: (id: string) => void
 
   // AI suggestions state
   aiSuggestions: AISuggestion[]
@@ -146,6 +148,7 @@ interface AppState {
   parameters: Parameter[]
   toggleParameterLock: (id: string) => void
   updateParameterValue: (id: string, value: number) => void
+  addParameter: () => void
 
   // Manufacturing issues
   manufacturingIssues: ManufacturingIssue[]
@@ -169,10 +172,19 @@ interface AppState {
   // AI chat panel state
   chatMessages: ChatMessage[]
   isAiThinking: boolean
-  addChatMessage: (msg: ChatMessage) => void
+  addChatMessage: (msg: Omit<ChatMessage, 'id'> | ChatMessage) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
 }
+
+let chatIdCounter = 0
+const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
+
+let featureIdCounter = 0
+const nextFeatureId = () => `feat-${Date.now()}-${featureIdCounter++}`
+
+let parameterIdCounter = 0
+const nextParameterId = () => `param-${Date.now()}-${parameterIdCounter++}`
 
 export const useAppStore = create<AppState>((set) => ({
   // Auth state
@@ -184,6 +196,22 @@ export const useAppStore = create<AppState>((set) => ({
   features: initialFeatures,
   selectedFeature: null,
   selectFeature: (id) => set({ selectedFeature: id }),
+  addFeature: (feature) =>
+    set((state) => {
+      const id = feature?.id ?? nextFeatureId()
+      const newFeature: Feature = {
+        id,
+        name: feature?.name ?? `New Feature ${state.features.length + 1}`,
+        type: feature?.type ?? 'sketch',
+        ...feature,
+      }
+      return { features: [...state.features, newFeature] }
+    }),
+  removeFeature: (id) =>
+    set((state) => ({
+      features: state.features.filter((f) => f.id !== id),
+      selectedFeature: state.selectedFeature === id ? null : state.selectedFeature,
+    })),
 
   // AI suggestions state
   aiSuggestions: initialSuggestions,
@@ -225,6 +253,19 @@ export const useAppStore = create<AppState>((set) => ({
         p.id === id ? { ...p, value } : p
       ),
     })),
+  addParameter: () =>
+    set((state) => ({
+      parameters: [
+        ...state.parameters,
+        {
+          id: nextParameterId(),
+          name: `Parameter ${state.parameters.length + 1}`,
+          value: 0,
+          unit: 'mm',
+          locked: false,
+        },
+      ],
+    })),
 
   // Manufacturing issues
   manufacturingIssues: initialIssues,
@@ -248,7 +289,12 @@ export const useAppStore = create<AppState>((set) => ({
   chatMessages: [],
   isAiThinking: false,
   addChatMessage: (msg) =>
-    set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+    set((s) => ({
+      chatMessages: [
+        ...s.chatMessages,
+        'id' in msg && msg.id ? msg : { ...msg, id: nextChatId() },
+      ],
+    })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
 }))

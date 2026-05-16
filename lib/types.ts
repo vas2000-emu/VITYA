@@ -61,6 +61,7 @@ export type RightPanelType = 'ai' | 'manufacturing'
 
 // Chat
 export interface ChatMessage {
+  id: string
   role: 'user' | 'assistant'
   content: string
 }
