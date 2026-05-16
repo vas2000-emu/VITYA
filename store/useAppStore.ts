@@ -175,7 +175,30 @@ interface AppState {
   addChatMessage: (msg: Omit<ChatMessage, 'id'> | ChatMessage) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
+
+  // Viewport state — lives in the store so renderer can be swapped
+  // (canvas2D ↔ r3f) and so cross-component toolbar / feature-tree
+  // can drive the camera without prop-drilling.
+  viewportActiveView: ViewportPreset | null
+  viewportTool: ViewportTool
+  viewportGrid: boolean
+  viewportHeatmap: boolean
+  viewportZoomNudge: number // bump this to push camera closer (+) / farther (-)
+  setViewportView: (view: ViewportPreset | null) => void
+  setViewportTool: (tool: ViewportTool) => void
+  toggleViewportGrid: () => void
+  toggleViewportHeatmap: () => void
+  nudgeZoom: (delta: number) => void
+
+  // STL upload / current part
+  uploadedSTL: string | null
+  setUploadedSTL: (url: string | null) => void
+  currentPartId: string
+  setCurrentPartId: (id: string) => void
 }
+
+export type ViewportPreset = 'home' | 'isometric' | 'front' | 'top' | 'right'
+export type ViewportTool = 'rotate' | 'pan'
 
 let chatIdCounter = 0
 const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
@@ -297,4 +320,23 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
+
+  // Viewport state — drives the r3f scene. Defaults match the previous
+  // canvas-2D viewport so the visual baseline is unchanged.
+  viewportActiveView: 'isometric',
+  viewportTool: 'rotate',
+  viewportGrid: true,
+  viewportHeatmap: true,
+  viewportZoomNudge: 0,
+  setViewportView: (view) => set({ viewportActiveView: view }),
+  setViewportTool: (tool) => set({ viewportTool: tool }),
+  toggleViewportGrid: () => set((s) => ({ viewportGrid: !s.viewportGrid })),
+  toggleViewportHeatmap: () => set((s) => ({ viewportHeatmap: !s.viewportHeatmap })),
+  nudgeZoom: (delta) => set((s) => ({ viewportZoomNudge: s.viewportZoomNudge + delta })),
+
+  // STL upload / current part library
+  uploadedSTL: null,
+  setUploadedSTL: (url) => set({ uploadedSTL: url }),
+  currentPartId: 'bracket',
+  setCurrentPartId: (id) => set({ currentPartId: id }),
 }))
