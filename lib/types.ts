@@ -128,7 +128,7 @@ export interface MoldChecklistItem {
   status: MoldChecklistStatus
 }
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm'
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
 
 export interface MoldAnalysisResult {
   partId: PartId

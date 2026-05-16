@@ -154,6 +154,31 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
       URL.revokeObjectURL(app.uploadedSTL)
       app.setUploadedSTL(null)
     }
+    // Sync the workspace's simulationParams so the /analysis/* pages
+    // (cost, draft, thickness, undercut, on-demand) reflect this part
+    // when the user navigates there. partSimInputs uses the API's
+    // snake_case shape; simulationParams uses camelCase — map across.
+    const inputs = partSimInputs[id]
+    if (inputs) {
+      app.updateSimulationParams({
+        material: inputs.material,
+        wallThickness: inputs.wall_thickness,
+        partVolume: inputs.part_volume,
+        partWeight: inputs.part_weight,
+        projectedArea: inputs.projected_area,
+        partLength: inputs.part_length,
+        partWidth: inputs.part_width,
+        meltTemp: inputs.melt_temp,
+        moldTemp: inputs.mold_temp,
+        productionQuantity: inputs.production_quantity,
+        complexity: inputs.complexity,
+        numCavities: inputs.num_cavities,
+        numUndercuts: inputs.num_undercuts,
+        minDraftAngle: inputs.min_draft_angle,
+        hasSharpCorners: inputs.has_sharp_corners,
+        hasUniformWall: inputs.has_uniform_wall,
+      })
+    }
     // Fire the moldsim API for the new part. simulateToken bump inside
     // runMoldsim cancels any earlier in-flight run.
     void get().runMoldsim()
