@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   Box,
   Circle,
@@ -10,6 +11,7 @@ import {
   Settings,
   GitCompare,
   AlertTriangle,
+  FileText,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 
@@ -76,6 +78,15 @@ export function Toolbar() {
           <AlertTriangle className="size-4" />
           <span className="text-sm">Manufacturing</span>
         </button>
+
+        <Link
+          href="/results"
+          className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded"
+          title="View MoldLocal readiness report"
+        >
+          <FileText className="size-4" />
+          <span className="text-sm">Reports</span>
+        </Link>
 
         <div className="h-6 w-px bg-zinc-700" />
 
