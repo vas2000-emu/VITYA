@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
 import type { Feature, FeatureType } from '@/lib/types'
 
@@ -28,6 +29,42 @@ const featureIcons: Record<FeatureType, React.ReactNode> = {
   origin: <Circle className="size-4 text-zinc-500" />,
 }
 
+// Per-feature metadata surfaced on click. Datum planes additionally
+// snap the camera (handled by CameraController.FEATURE_VIEW). Sketches,
+// bodies, holes, and fillets show a toast with realistic CAD context
+// so the user knows what each feature represents instead of getting a
+// silent highlight.
+const FEATURE_INFO: Record<string, { description: string; detail: string }> = {
+  origin: {
+    description: 'Origin datum',
+    detail: 'World coordinate root. Camera snapped to isometric view.',
+  },
+  top: {
+    description: 'Top Plane (XZ)',
+    detail: 'Datum at Y = 0. Camera snapped to top view.',
+  },
+  front: {
+    description: 'Front Plane (XY)',
+    detail: 'Datum at Z = 0. Camera snapped to front view.',
+  },
+  right: {
+    description: 'Right Plane (YZ)',
+    detail: 'Datum at X = 0. Camera snapped to right view.',
+  },
+  baseBody: {
+    description: 'Base Body (Extrude)',
+    detail: 'Extrude Sketch 1 by 12 mm · merge · main bracket footprint.',
+  },
+  mountingHole: {
+    description: 'Mounting Hole',
+    detail: 'Through-hole, Ø6.5 mm × 2 instances · pattern on base.',
+  },
+  edgeRounds: {
+    description: 'Edge Rounds (Fillet)',
+    detail: '2 mm radius on top edges · 12 edges selected.',
+  },
+}
+
 interface FeatureItemProps {
   feature: Feature
   level?: number
@@ -39,6 +76,16 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
   const { selectedFeature, selectFeature } = useAppStore()
   const hasChildren = feature.children && feature.children.length > 0
 
+  const handleSelect = () => {
+    selectFeature(feature.id)
+    const info = FEATURE_INFO[feature.id]
+    if (info) {
+      toast(info.description, { description: info.detail })
+    } else {
+      toast(feature.name, { description: `${feature.type} feature selected.` })
+    }
+  }
+
   return (
     <div>
       <div
@@ -46,7 +93,7 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
           selectedFeature === feature.id ? 'bg-blue-500/20' : ''
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
-        onClick={() => selectFeature(feature.id)}
+        onClick={handleSelect}
       >
         {hasChildren ? (
           <button
@@ -94,7 +141,14 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
 
 export function FeatureTree() {
   const [searchQuery, setSearchQuery] = useState('')
-  const { features, leftCollapsed, setLeftCollapsed } = useAppStore()
+  const {
+    features,
+    selectedFeature,
+    leftCollapsed,
+    setLeftCollapsed,
+    addFeature,
+    removeFeature,
+  } = useAppStore()
 
   if (leftCollapsed) {
     return (
@@ -138,13 +192,27 @@ export function FeatureTree() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
         <span className="text-sm font-medium">Features ({features.length})</span>
         <div className="flex gap-1">
-          <button className="p-1 hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            onClick={() => addFeature()}
+            className="p-1 hover:bg-zinc-800 rounded"
+            title="Add feature"
+            aria-label="Add feature"
+          >
             <Plus className="size-4" />
           </button>
-          <button className="p-1 hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            onClick={() => selectedFeature && removeFeature(selectedFeature)}
+            disabled={!selectedFeature}
+            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+            title={selectedFeature ? 'Remove selected feature' : 'Select a feature first'}
+            aria-label="Remove selected feature"
+          >
             <Minus className="size-4" />
           </button>
           <button
+            type="button"
             onClick={() => setLeftCollapsed(true)}
             className="p-1 hover:bg-zinc-800 rounded"
             title="Collapse Features"
@@ -158,14 +226,6 @@ export function FeatureTree() {
         {filteredFeatures.map((feature) => (
           <FeatureItem key={feature.id} feature={feature} />
         ))}
-      </div>
-
-      <div className="p-3 border-t border-zinc-800">
-        <div className="text-xs text-zinc-500">Parts (1)</div>
-        <div className="flex items-center gap-2 px-2 py-1 mt-1 text-sm hover:bg-zinc-800/50 rounded cursor-pointer">
-          <Box className="size-4" />
-          <span>Part 1</span>
-        </div>
       </div>
     </div>
   )

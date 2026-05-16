@@ -2,6 +2,7 @@
 
 import { ArrowRight, TrendingUp } from 'lucide-react'
 import { useResultsStore, computeCurrentScore } from '@/store/useResultsStore'
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber'
 
 function scoreTone(score: number) {
   if (score >= 80) return 'text-emerald-300'
@@ -55,14 +56,16 @@ function ScoreRing({ score, size = 96 }: { score: number; size?: number }) {
 
 export function ScoreImprovement() {
   const { analysis, fixedIssueIds } = useResultsStore()
-  const current = computeCurrentScore(
+  const target = analysis.improvedScore
+  const targetCurrent = computeCurrentScore(
     analysis.overallScore,
     analysis.improvedScore,
     fixedIssueIds,
     analysis.issues,
   )
+  const animated = useAnimatedNumber(targetCurrent, 700)
+  const current = Math.round(animated)
   const delta = current - analysis.overallScore
-  const target = analysis.improvedScore
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">

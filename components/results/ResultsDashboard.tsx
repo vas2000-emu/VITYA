@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, Cpu, RotateCcw, RefreshCw } from 'lucide-react'
+import { ChevronLeft, Cpu, RotateCcw, RefreshCw, Download, Activity, AlertTriangle } from 'lucide-react'
 import { useResultsStore } from '@/store/useResultsStore'
 import { ScoreOverview } from './ScoreOverview'
 import { PartPreview } from './PartPreview'
@@ -10,6 +10,7 @@ import { IssueDetailPanel } from './IssueDetailPanel'
 import { ScoreImprovement } from './ScoreImprovement'
 import { ReadinessChecklist } from './ReadinessChecklist'
 import { LoadingScreen } from './LoadingScreen'
+import { PartsSidebar } from './PartsSidebar'
 
 export function ResultsDashboard() {
   const {
@@ -17,7 +18,9 @@ export function ResultsDashboard() {
     fixedIssueIds,
     resetFixes,
     loading,
-    simulateAnalysis,
+    runMoldsim,
+    liveResults,
+    liveError,
     selectIssue,
   } = useResultsStore()
 
@@ -30,6 +33,16 @@ export function ResultsDashboard() {
       selectIssue(focusId)
     }
   }, [analysis.issues, selectIssue])
+
+  // Fire moldsim once on mount so the dashboard opens with live API
+  // numbers instead of the static mock baseline. Guard against StrictMode
+  // double-invoke + against re-firing on every re-render.
+  const didAutorun = useRef(false)
+  useEffect(() => {
+    if (didAutorun.current) return
+    didAutorun.current = true
+    void runMoldsim()
+  }, [runMoldsim])
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100">
@@ -55,6 +68,15 @@ export function ResultsDashboard() {
             <span className="text-xs text-zinc-500 font-mono">
               {analysis.partName}
             </span>
+            {liveResults && (
+              <span
+                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-wider rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                title="Scores sourced from /api/moldsim — live API response"
+              >
+                <Activity className="size-3" />
+                Live API
+              </span>
+            )}
           </span>
         </nav>
 
@@ -66,6 +88,7 @@ export function ResultsDashboard() {
           <div className="h-6 w-px bg-zinc-700" />
 
           <button
+            type="button"
             onClick={resetFixes}
             disabled={fixedIssueIds.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
@@ -76,10 +99,28 @@ export function ResultsDashboard() {
           </button>
 
           <button
-            onClick={() => void simulateAnalysis()}
+            type="button"
+            onClick={() => {
+              const fixed = fixedIssueIds.join(',')
+              const url = `/api/report?partId=${analysis.partId}${fixed ? `&fixed=${encodeURIComponent(fixed)}` : ''}`
+              window.open(url, '_blank', 'noopener')
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
+            title="Download PDF report for the current part"
+          >
+            <Download className="size-4" />
+            <span className="text-sm">PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (loading) return
+              await runMoldsim()
+            }}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Re-run analysis on the part"
+            title="Re-run moldsim API analysis"
           >
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="text-sm">Re-analyze</span>
@@ -92,6 +133,18 @@ export function ResultsDashboard() {
       ) : (
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+            {liveError && (
+              <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200">
+                <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <div className="font-medium">Moldsim API unavailable</div>
+                  <div className="text-xs text-amber-200/80 mt-0.5">
+                    Falling back to baseline mock numbers. Click Re-analyze to retry. ({liveError})
+                  </div>
+                </div>
+              </div>
+            )}
+
             <ScoreOverview />
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -100,6 +153,7 @@ export function ResultsDashboard() {
                 <ScoreImprovement />
               </div>
               <div className="lg:col-span-2 space-y-6">
+                <PartsSidebar />
                 <IssueDetailPanel />
                 <ReadinessChecklist />
               </div>

@@ -3,6 +3,7 @@
 import { Factory, Layers3, DollarSign, Clock } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useResultsStore, computeCurrentScore } from '@/store/useResultsStore'
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber'
 import type { MoldRiskMetric } from '@/lib/types'
 
 const ICONS: LucideIcon[] = [Factory, Layers3, DollarSign, Clock]
@@ -40,12 +41,13 @@ function MetricCard({ metric, index, liveValue }: {
 
 export function ScoreOverview() {
   const { analysis, fixedIssueIds } = useResultsStore()
-  const currentScore = computeCurrentScore(
+  const targetScore = computeCurrentScore(
     analysis.overallScore,
     analysis.improvedScore,
     fixedIssueIds,
     analysis.issues,
   )
+  const animatedScore = useAnimatedNumber(targetScore, 700)
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -55,7 +57,7 @@ export function ScoreOverview() {
           metric={metric}
           index={i}
           liveValue={
-            i === 0 && fixedIssueIds.length > 0 ? `${currentScore}/100` : undefined
+            i === 0 ? `${Math.round(animatedScore)}/100` : undefined
           }
         />
       ))}
