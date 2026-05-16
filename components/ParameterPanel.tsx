@@ -15,10 +15,11 @@ const paramToSimulationKey: Record<string, string> = {
 
 export function ParameterPanel() {
   const [editingId, setEditingId] = useState<string | null>(null)
-  const { 
-    parameters, 
-    toggleParameterLock, 
+  const {
+    parameters,
+    toggleParameterLock,
     updateParameterValue,
+    addParameter,
     simulationParams,
     updateSimulationParams,
   } = useAppStore()
@@ -26,7 +27,7 @@ export function ParameterPanel() {
   // Handle parameter value change, sync with simulation params if applicable
   const handleValueChange = (paramId: string, newValue: number) => {
     updateParameterValue(paramId, newValue)
-    
+
     // Sync to simulation params if this is a mapped parameter
     const simKey = paramToSimulationKey[paramId]
     if (simKey) {
@@ -182,7 +183,11 @@ export function ParameterPanel() {
       </div>
 
       <div className="p-3 border-t border-zinc-800">
-        <button className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded">
+        <button
+          type="button"
+          onClick={addParameter}
+          className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded"
+        >
           + Add Parameter
         </button>
       </div>

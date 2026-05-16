@@ -57,8 +57,6 @@ const initialFeatures: Feature[] = [
       { id: 'right', name: 'Right Plane', type: 'plane' },
     ],
   },
-  { id: 'sketch1', name: 'Sketch 1', type: 'sketch' },
-  { id: 'sketch2', name: 'Sketch 2', type: 'sketch' },
   { id: 'baseBody', name: 'Base Body', type: 'extrude' },
   { id: 'mountingHole', name: 'Mounting Hole', type: 'hole' },
   { id: 'edgeRounds', name: 'Edge Rounds', type: 'fillet' },
@@ -170,6 +168,8 @@ interface AppState {
   features: Feature[]
   selectedFeature: string | null
   selectFeature: (id: string | null) => void
+  addFeature: (feature?: Partial<Feature>) => void
+  removeFeature: (id: string) => void
 
   // AI suggestions state
   aiSuggestions: AISuggestion[]
@@ -181,6 +181,7 @@ interface AppState {
   parameters: Parameter[]
   toggleParameterLock: (id: string) => void
   updateParameterValue: (id: string, value: number) => void
+  addParameter: () => void
 
   // Manufacturing issues
   manufacturingIssues: ManufacturingIssue[]
@@ -204,17 +205,49 @@ interface AppState {
   // AI chat panel state
   chatMessages: ChatMessage[]
   isAiThinking: boolean
-  addChatMessage: (msg: ChatMessage) => void
+  addChatMessage: (msg: Omit<ChatMessage, 'id'> | ChatMessage) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
 
-  // Simulation state
+  // Viewport state — lives in the store so renderer can be swapped
+  // (canvas2D ↔ r3f) and so cross-component toolbar / feature-tree
+  // can drive the camera without prop-drilling.
+  viewportActiveView: ViewportPreset | null
+  viewportTool: ViewportTool
+  viewportGrid: boolean
+  viewportHeatmap: boolean
+  viewportZoomNudge: number // bump this to push camera closer (+) / farther (-)
+  setViewportView: (view: ViewportPreset | null) => void
+  setViewportTool: (tool: ViewportTool) => void
+  toggleViewportGrid: () => void
+  toggleViewportHeatmap: () => void
+  nudgeZoom: (delta: number) => void
+
+  // STL upload / current part
+  uploadedSTL: string | null
+  setUploadedSTL: (url: string | null) => void
+  currentPartId: string
+  setCurrentPartId: (id: string) => void
+
+  // Simulation state (moldsim backend)
   simulationParams: SimulationParams
   simulationResults: SimulationResults
   updateSimulationParams: (params: Partial<SimulationParams>) => void
   setSimulationResults: (results: Partial<SimulationResults>) => void
   resetSimulationResults: () => void
 }
+
+export type ViewportPreset = 'home' | 'isometric' | 'front' | 'top' | 'right'
+export type ViewportTool = 'rotate' | 'pan'
+
+let chatIdCounter = 0
+const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
+
+let featureIdCounter = 0
+const nextFeatureId = () => `feat-${Date.now()}-${featureIdCounter++}`
+
+let parameterIdCounter = 0
+const nextParameterId = () => `param-${Date.now()}-${parameterIdCounter++}`
 
 export const useAppStore = create<AppState>((set) => ({
   // Auth state
@@ -226,6 +259,22 @@ export const useAppStore = create<AppState>((set) => ({
   features: initialFeatures,
   selectedFeature: null,
   selectFeature: (id) => set({ selectedFeature: id }),
+  addFeature: (feature) =>
+    set((state) => {
+      const id = feature?.id ?? nextFeatureId()
+      const newFeature: Feature = {
+        id,
+        name: feature?.name ?? `New Feature ${state.features.length + 1}`,
+        type: feature?.type ?? 'sketch',
+        ...feature,
+      }
+      return { features: [...state.features, newFeature] }
+    }),
+  removeFeature: (id) =>
+    set((state) => ({
+      features: state.features.filter((f) => f.id !== id),
+      selectedFeature: state.selectedFeature === id ? null : state.selectedFeature,
+    })),
 
   // AI suggestions state
   aiSuggestions: initialSuggestions,
@@ -267,6 +316,19 @@ export const useAppStore = create<AppState>((set) => ({
         p.id === id ? { ...p, value } : p
       ),
     })),
+  addParameter: () =>
+    set((state) => ({
+      parameters: [
+        ...state.parameters,
+        {
+          id: nextParameterId(),
+          name: `Parameter ${state.parameters.length + 1}`,
+          value: 0,
+          unit: 'mm',
+          locked: false,
+        },
+      ],
+    })),
 
   // Manufacturing issues
   manufacturingIssues: initialIssues,
@@ -290,11 +352,35 @@ export const useAppStore = create<AppState>((set) => ({
   chatMessages: [],
   isAiThinking: false,
   addChatMessage: (msg) =>
-    set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+    set((s) => ({
+      chatMessages: [
+        ...s.chatMessages,
+        'id' in msg && msg.id ? msg : { ...msg, id: nextChatId() },
+      ],
+    })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
 
-  // Simulation state
+  // Viewport state — drives the r3f scene. Defaults match the previous
+  // canvas-2D viewport so the visual baseline is unchanged.
+  viewportActiveView: 'isometric',
+  viewportTool: 'rotate',
+  viewportGrid: true,
+  viewportHeatmap: true,
+  viewportZoomNudge: 0,
+  setViewportView: (view) => set({ viewportActiveView: view }),
+  setViewportTool: (tool) => set({ viewportTool: tool }),
+  toggleViewportGrid: () => set((s) => ({ viewportGrid: !s.viewportGrid })),
+  toggleViewportHeatmap: () => set((s) => ({ viewportHeatmap: !s.viewportHeatmap })),
+  nudgeZoom: (delta) => set((s) => ({ viewportZoomNudge: s.viewportZoomNudge + delta })),
+
+  // STL upload / current part library
+  uploadedSTL: null,
+  setUploadedSTL: (url) => set({ uploadedSTL: url }),
+  currentPartId: 'bracket',
+  setCurrentPartId: (id) => set({ currentPartId: id }),
+
+  // Simulation state (moldsim backend)
   simulationParams: {
     material: 'ABS',
     wallThickness: 2.5,

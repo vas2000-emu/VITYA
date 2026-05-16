@@ -8,6 +8,7 @@ import {
   DollarSign,
   Clock,
   MapPin,
+  Loader2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useResultsStore } from '@/store/useResultsStore'
@@ -85,12 +86,15 @@ export function IssueDetailPanel() {
     analysis,
     selectedIssueId,
     fixedIssueIds,
+    pendingFixId,
     showFix,
     toggleShowFix,
     applyFix,
   } = useResultsStore()
 
   const selected = analysis.issues.find((i) => i.id === selectedIssueId)
+  const isPending = selected ? pendingFixId === selected.id : false
+  const isFixed = selected ? fixedIssueIds.includes(selected.id) : false
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden flex flex-col">
@@ -160,8 +164,9 @@ export function IssueDetailPanel() {
           </div>
 
           <div className="pt-1">
-            {!showFix && !fixedIssueIds.includes(selected.id) ? (
+            {!showFix && !isFixed ? (
               <button
+                type="button"
                 onClick={toggleShowFix}
                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors"
               >
@@ -180,15 +185,26 @@ export function IssueDetailPanel() {
                   </div>
                 </div>
 
-                {fixedIssueIds.includes(selected.id) ? (
+                {isFixed ? (
                   <div className="flex items-center gap-2 text-sm text-emerald-300">
                     <CheckCircle2 className="size-4" />
                     Fix applied — score updated.
                   </div>
+                ) : isPending ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-emerald-600/60 text-sm font-medium text-white cursor-wait"
+                  >
+                    <Loader2 className="size-4 animate-spin" />
+                    Applying fix…
+                  </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => applyFix(selected.id)}
-                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-sm font-medium text-white transition-colors"
+                    disabled={!!pendingFixId}
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-sm font-medium text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <CheckCircle2 className="size-4" />
                     Apply fix ({selected.scoreImpact} score)
