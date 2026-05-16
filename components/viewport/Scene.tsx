@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Grid, Environment, ContactShadows } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { CameraController } from './CameraController'
 import { Part } from './Part'
+import { WebGLContextLossOverlay } from './WebGLContextLossOverlay'
 
 /**
  * Root r3f scene. Lighting + ground + axes live here; the actual part
@@ -13,13 +15,23 @@ import { Part } from './Part'
  */
 export function Scene() {
   const showGrid = useAppStore((s) => s.viewportGrid)
+  const [lost, setLost] = useState(false)
 
   return (
+    <>
     <Canvas
       shadows
       dpr={[1, 2]}
       camera={{ position: [220, 160, 220], fov: 45, near: 1, far: 2000 }}
       gl={{ antialias: true }}
+      onCreated={({ gl }) => {
+        const canvas = gl.domElement
+        canvas.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault()
+          setLost(true)
+        })
+        canvas.addEventListener('webglcontextrestored', () => setLost(false))
+      }}
     >
       <color attach="background" args={['#09090b']} />
       <ambientLight intensity={0.45} />
@@ -61,5 +73,7 @@ export function Scene() {
 
       <CameraController />
     </Canvas>
+    {lost && <WebGLContextLossOverlay onReload={() => location.reload()} />}
+    </>
   )
 }
