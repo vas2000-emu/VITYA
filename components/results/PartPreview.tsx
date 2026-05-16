@@ -2,7 +2,7 @@
 
 import { useResultsStore } from '@/store/useResultsStore'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
-import { MiniViewport } from './MiniViewport'
+import { PartSilhouette } from './PartSilhouette'
 
 const SEVERITY_RING: Record<MoldIssueSeverity, string> = {
   high: 'bg-rose-500 shadow-[0_0_0_8px_rgba(244,63,94,0.18)]',
@@ -78,7 +78,7 @@ export function PartPreview() {
       </div>
 
       <div className="relative aspect-[4/3] bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
-        <MiniViewport />
+        <PartSilhouette partId={analysis.partId} />
         {analysis.issues.map((issue) => (
           <Hotspot key={issue.id} issue={issue} />
         ))}
