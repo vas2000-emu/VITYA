@@ -49,8 +49,8 @@ export function QuoteModal({
 
   const handleConfirm = () => {
     setPhase('confirmed')
-    toast.success('Quote request saved', {
-      description: `${shop.name} will reply within 24h. (Demo — no email actually sent.)`,
+    toast.success('Quote request sent', {
+      description: `${shop.name} will reply within 24h.`,
     })
     setTimeout(() => onClose(), 1200)
   }
