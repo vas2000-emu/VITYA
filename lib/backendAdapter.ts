@@ -149,9 +149,18 @@ export function adaptBackendResponse(
 
 // Example wiring (uncomment when the backend route exists):
 //
-// export async function fetchAnalysis(partId: string): Promise<MoldAnalysisResult> {
-//   const res = await fetch(`/api/analyze/${partId}`)
-//   if (!res.ok) throw new Error('Analysis fetch failed')
-//   const data = (await res.json()) as BackendAnalysisResponse
-//   return adaptBackendResponse(data)
+// import { useResultsStore } from '@/store/useResultsStore'
+//
+// export async function runAnalysis(partId: string): Promise<void> {
+//   const { setLoading, setAnalysis } = useResultsStore.getState()
+//   try {
+//     setLoading(true, 'Parsing STEP geometry')
+//     const res = await fetch(`/api/analyze/${partId}`)
+//     if (!res.ok) throw new Error('Analysis fetch failed')
+//     setLoading(true, 'Generating recommendations')
+//     const data = (await res.json()) as BackendAnalysisResponse
+//     setAnalysis(adaptBackendResponse(data))
+//   } finally {
+//     setLoading(false)
+//   }
 // }
