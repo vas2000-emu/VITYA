@@ -16,23 +16,47 @@ import { WebGLContextLossOverlay } from './WebGLContextLossOverlay'
 export function Scene() {
   const showGrid = useAppStore((s) => s.viewportGrid)
   const [lost, setLost] = useState(false)
+  const [remountKey, setRemountKey] = useState(0)
   const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const restoreExt = useRef<WEBGL_lose_context | null>(null)
+
+  const forceRestart = () => {
+    // Try the soft path first (still has GL context): force-lose + restore
+    // via the standard extension; r3f re-initializes inside the existing
+    // canvas. If that fails, fall through to a hard React remount which
+    // tears down the Canvas component entirely and creates a fresh GL
+    // context from scratch.
+    try {
+      restoreExt.current?.loseContext()
+      setTimeout(() => restoreExt.current?.restoreContext(), 50)
+    } catch {
+      setRemountKey((k) => k + 1)
+    }
+  }
 
   return (
     <>
     <Canvas
+      key={remountKey}
       shadows
       dpr={[1, 2]}
       camera={{ position: [220, 160, 220], fov: 45, near: 1, far: 2000 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
         const canvas = gl.domElement
+        restoreExt.current = gl.getContext().getExtension('WEBGL_lose_context')
         canvas.addEventListener('webglcontextlost', (e) => {
           e.preventDefault()
-          // Debounce: HMR + brief context churn often restores within ~1s.
-          // Only escalate to the overlay if no restore arrives in 2s.
+          // Try to recover immediately via the extension. Most consumer
+          // GPUs grant it. If recovery succeeds, the restored event fires
+          // and we never escalate to the overlay.
+          try {
+            restoreExt.current?.restoreContext()
+          } catch {
+            /* fall through to debounced overlay */
+          }
           if (lostTimer.current) clearTimeout(lostTimer.current)
-          lostTimer.current = setTimeout(() => setLost(true), 2000)
+          lostTimer.current = setTimeout(() => setLost(true), 2500)
         })
         canvas.addEventListener('webglcontextrestored', () => {
           if (lostTimer.current) {
@@ -83,7 +107,12 @@ export function Scene() {
 
       <CameraController />
     </Canvas>
-    {lost && <WebGLContextLossOverlay onReload={() => location.reload()} />}
+    {lost && (
+      <WebGLContextLossOverlay
+        onReload={() => location.reload()}
+        onRestart={forceRestart}
+      />
+    )}
     </>
   )
 }
