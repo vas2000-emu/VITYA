@@ -13,7 +13,28 @@ import {
   PanelRight,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
-import type { AISuggestion, Operation, OperationType } from '@/lib/types'
+import type {
+  AISuggestion,
+  ChatMessage,
+  Operation,
+  OperationType,
+} from '@/lib/types'
+
+const QUICK_PROMPTS: { label: string; prompt: string }[] = [
+  {
+    label: 'Add fillet',
+    prompt: 'How should I add fillets to the sharp edges of this part?',
+  },
+  {
+    label: 'Check draft',
+    prompt: 'Are the draft angles on this part sufficient for clean ejection?',
+  },
+  {
+    label: 'Optimize',
+    prompt:
+      'How can I optimize this part for cheaper, faster Michigan injection molding?',
+  },
+]
 
 const operationColors: Record<OperationType, string> = {
   add: 'text-green-400',
@@ -180,7 +201,48 @@ export function AIAssistantPanel() {
     previewSuggestion,
     rightCollapsed,
     setRightCollapsed,
+    chatMessages,
+    isAiThinking,
+    addChatMessage,
+    setAiThinking,
   } = useAppStore()
+
+  const sendMessage = async (overrideText?: string) => {
+    const text = (overrideText ?? message).trim()
+    if (!text || isAiThinking) return
+    setMessage('')
+
+    const userMsg: ChatMessage = { role: 'user', content: text }
+    addChatMessage(userMsg)
+    setAiThinking(true)
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...chatMessages, userMsg] }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        addChatMessage({
+          role: 'assistant',
+          content: `Couldn't reach the model: ${data.error ?? res.statusText}`,
+        })
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: data.reply ?? '(no response)',
+        })
+      }
+    } catch {
+      addChatMessage({
+        role: 'assistant',
+        content: 'Network error — try again in a moment.',
+      })
+    } finally {
+      setAiThinking(false)
+    }
+  }
 
   if (rightCollapsed) {
     return (
@@ -226,9 +288,25 @@ export function AIAssistantPanel() {
           />
         ))}
 
-        <div className="border border-dashed border-zinc-700 rounded-lg p-6 text-center">
-          <div className="text-sm text-zinc-500">AI will suggest optimizations as you work</div>
-        </div>
+        {chatMessages.length === 0 && !isAiThinking ? (
+          <div className="border border-dashed border-zinc-700 rounded-lg p-6 text-center">
+            <div className="text-sm text-zinc-500">
+              AI will suggest optimizations as you work
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {chatMessages.map((m, i) => (
+              <ChatBubble key={i} message={m} />
+            ))}
+            {isAiThinking && (
+              <ChatBubble
+                message={{ role: 'assistant', content: 'Thinking…' }}
+                muted
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="p-4 border-t border-zinc-800">
@@ -237,24 +315,62 @@ export function AIAssistantPanel() {
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void sendMessage()
+              }
+            }}
             placeholder="Ask AI to modify the design..."
-            className="flex-1 px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded outline-none focus:border-blue-500"
+            disabled={isAiThinking}
+            className="flex-1 px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded outline-none focus:border-blue-500 disabled:opacity-60"
           />
-          <button className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded">
-            Send
+          <button
+            onClick={() => void sendMessage()}
+            disabled={isAiThinking || !message.trim()}
+            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded"
+          >
+            {isAiThinking ? '…' : 'Send'}
           </button>
         </div>
         <div className="flex gap-2 mt-2">
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Add fillet
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Check draft
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Optimize
-          </button>
+          {QUICK_PROMPTS.map((q) => (
+            <button
+              key={q.label}
+              onClick={() => void sendMessage(q.prompt)}
+              disabled={isAiThinking}
+              className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed rounded"
+              title={q.prompt}
+            >
+              {q.label}
+            </button>
+          ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ChatBubble({
+  message,
+  muted,
+}: {
+  message: ChatMessage
+  muted?: boolean
+}) {
+  const isUser = message.role === 'user'
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] px-3 py-2 rounded-lg text-sm leading-relaxed whitespace-pre-wrap ${
+          isUser
+            ? 'bg-blue-600 text-white'
+            : muted
+            ? 'bg-zinc-800 text-zinc-500 italic'
+            : 'bg-zinc-800 text-zinc-100'
+        }`}
+      >
+        {message.content}
       </div>
     </div>
   )

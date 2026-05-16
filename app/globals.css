@@ -123,3 +123,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide scrollbars app-wide while preserving scroll behavior. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
