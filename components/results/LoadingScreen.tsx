@@ -47,7 +47,7 @@ export function LoadingScreen() {
   const loadingPhase = useResultsStore((s) => s.loadingPhase)
   const currentIndex = Math.max(
     0,
-    LOADING_PHASE_LABELS.indexOf(loadingPhase),
+    (LOADING_PHASE_LABELS as readonly string[]).indexOf(loadingPhase),
   )
 
   return (
