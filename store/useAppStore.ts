@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import type { Feature, AISuggestion, Parameter, ManufacturingIssue, RightPanelType } from '@/lib/types'
+import type {
+  Feature,
+  AISuggestion,
+  Parameter,
+  ManufacturingIssue,
+  RightPanelType,
+  ChatMessage,
+} from '@/lib/types'
 
 // Mock data — feature names kept in plain English so non-CAD users can
 // read the toolbar without translating CAD jargon ("Extrude 1" -> "Base
@@ -153,6 +160,13 @@ interface AppState {
   setLeftCollapsed: (collapsed: boolean) => void
   rightCollapsed: boolean
   setRightCollapsed: (collapsed: boolean) => void
+
+  // AI chat panel state
+  chatMessages: ChatMessage[]
+  isAiThinking: boolean
+  addChatMessage: (msg: ChatMessage) => void
+  setAiThinking: (thinking: boolean) => void
+  clearChat: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -220,4 +234,11 @@ export const useAppStore = create<AppState>((set) => ({
   setLeftCollapsed: (collapsed) => set({ leftCollapsed: collapsed }),
   rightCollapsed: false,
   setRightCollapsed: (collapsed) => set({ rightCollapsed: collapsed }),
+
+  chatMessages: [],
+  isAiThinking: false,
+  addChatMessage: (msg) =>
+    set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+  setAiThinking: (thinking) => set({ isAiThinking: thinking }),
+  clearChat: () => set({ chatMessages: [], isAiThinking: false }),
 }))
