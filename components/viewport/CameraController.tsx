@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls as DreiOrbit } from '@react-three/drei'
+import type { OrbitControls } from 'three-stdlib'
 import * as THREE from 'three'
 import { useAppStore, type ViewportPreset } from '@/store/useAppStore'
 
@@ -29,12 +30,19 @@ const FEATURE_VIEW: Record<string, ViewportPreset> = {
   right: 'right',
   origin: 'isometric',
   baseBody: 'isometric',
-  mountingHole: 'front',
   sketch1: 'top',
   sketch2: 'top',
   extrude1: 'isometric',
   extrude2: 'isometric',
   fillet1: 'isometric',
+}
+
+// Features that need a custom camera position + orbit target (not just a preset).
+// pos: where the camera goes; target: where it looks and orbits around.
+const FEATURE_CAMERA_OVERRIDE: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
+  // Sensor-mount bosses sit on the back face at (±78, -2, -11) — camera
+  // goes behind the bumper, centered between both bosses.
+  mountingHole: { pos: [0, 15, -140], target: [0, -2, -11] },
 }
 
 export function CameraController() {
@@ -45,6 +53,8 @@ export function CameraController() {
   const selectedFeature = useAppStore((s) => s.selectedFeature)
   const setViewportView = useAppStore((s) => s.setViewportView)
 
+  const controlsRef = useRef<OrbitControls>(null)
+
   const tween = useRef<{
     from: THREE.Vector3
     to: THREE.Vector3
@@ -54,6 +64,11 @@ export function CameraController() {
   useEffect(() => {
     if (!activeView) return
     const [x, y, z] = VIEW_TARGETS[activeView]
+    // Reset orbit target to origin when switching to a standard preset.
+    if (controlsRef.current) {
+      controlsRef.current.target.set(0, 0, 0)
+      controlsRef.current.update()
+    }
     tween.current = {
       from: camera.position.clone(),
       to: new THREE.Vector3(x, y, z),
@@ -61,15 +76,24 @@ export function CameraController() {
     }
   }, [activeView, camera])
 
-  // Datum-plane / origin clicks in the feature tree should drive the
-  // camera to the corresponding view preset. Other feature types
-  // (sketches, bodies, fillets) don't have an associated camera angle —
-  // ignore them.
   useEffect(() => {
     if (!selectedFeature) return
+    const override = FEATURE_CAMERA_OVERRIDE[selectedFeature]
+    if (override) {
+      tween.current = {
+        from: camera.position.clone(),
+        to: new THREE.Vector3(...override.pos),
+        start: performance.now(),
+      }
+      if (controlsRef.current) {
+        controlsRef.current.target.set(...override.target)
+        controlsRef.current.update()
+      }
+      return
+    }
     const preset = FEATURE_VIEW[selectedFeature]
     if (preset) setViewportView(preset)
-  }, [selectedFeature, setViewportView])
+  }, [selectedFeature, setViewportView, camera])
 
   // Toolbar zoom-in/out buttons bump `viewportZoomNudge`. We translate the
   // camera along its view direction. Sign of delta is encoded in the nudge
@@ -92,12 +116,14 @@ export function CameraController() {
     // ease-out cubic
     const k = 1 - Math.pow(1 - t, 3)
     camera.position.lerpVectors(tween.current.from, tween.current.to, k)
-    camera.lookAt(0, 0, 0)
+    const lookTarget = controlsRef.current ? controlsRef.current.target : new THREE.Vector3(0, 0, 0)
+    camera.lookAt(lookTarget)
     if (t >= 1) tween.current = null
   })
 
   return (
     <DreiOrbit
+      ref={controlsRef}
       makeDefault
       enableRotate={tool === 'rotate'}
       enablePan={tool === 'pan'}
