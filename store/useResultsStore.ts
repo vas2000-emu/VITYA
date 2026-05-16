@@ -8,10 +8,19 @@ interface ResultsState {
   fixedIssueIds: string[]
   showFix: boolean
 
+  // Loading state — flip these when the real backend fetch is wired in.
+  // See `lib/backendAdapter.ts` for the example fetchAnalysis() helper.
+  loading: boolean
+  loadingPhase: string
+  setLoading: (loading: boolean, phase?: string) => void
+  setAnalysis: (analysis: MoldAnalysisResult) => void
+
   selectIssue: (id: string | null) => void
   toggleShowFix: () => void
   applyFix: (id: string) => void
   resetFixes: () => void
+  /** Demo helper: cycles through loading phases then restores mock data. */
+  simulateAnalysis: () => Promise<void>
 }
 
 export const useResultsStore = create<ResultsState>((set) => ({
@@ -19,6 +28,17 @@ export const useResultsStore = create<ResultsState>((set) => ({
   selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
   fixedIssueIds: [],
   showFix: false,
+
+  loading: false,
+  loadingPhase: '',
+  setLoading: (loading, phase = '') => set({ loading, loadingPhase: phase }),
+  setAnalysis: (analysis) =>
+    set({
+      analysis,
+      selectedIssueId: analysis.issues[0]?.id ?? null,
+      fixedIssueIds: [],
+      showFix: false,
+    }),
 
   selectIssue: (id) => set({ selectedIssueId: id, showFix: false }),
   toggleShowFix: () => set((s) => ({ showFix: !s.showFix })),
@@ -29,6 +49,27 @@ export const useResultsStore = create<ResultsState>((set) => ({
         : { fixedIssueIds: [...s.fixedIssueIds, id], showFix: true },
     ),
   resetFixes: () => set({ fixedIssueIds: [], showFix: false }),
+
+  simulateAnalysis: async () => {
+    const phases = [
+      'Parsing STEP geometry',
+      'Detecting features (holes, bosses, ribs)',
+      'Checking draft angles and undercuts',
+      'Querying Michigan supplier readiness',
+      'Generating recommendations',
+    ]
+    for (const phase of phases) {
+      set({ loading: true, loadingPhase: phase })
+      await new Promise((r) => setTimeout(r, 550))
+    }
+    set({
+      loading: false,
+      loadingPhase: '',
+      fixedIssueIds: [],
+      showFix: false,
+      selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
+    })
+  },
 }))
 
 export function computeCurrentScore(
