@@ -51,14 +51,6 @@ const FEATURE_INFO: Record<string, { description: string; detail: string }> = {
     description: 'Right Plane (YZ)',
     detail: 'Datum at X = 0. Camera snapped to right view.',
   },
-  sketch1: {
-    description: 'Sketch 1 — 2D profile',
-    detail: 'References Top Plane · 4 lines, 2 arcs, fully constrained.',
-  },
-  sketch2: {
-    description: 'Sketch 2 — 2D profile',
-    detail: 'References Front Plane · rib outline, 3 lines, fully constrained.',
-  },
   baseBody: {
     description: 'Base Body (Extrude)',
     detail: 'Extrude Sketch 1 by 12 mm · merge · main bracket footprint.',
@@ -234,14 +226,6 @@ export function FeatureTree() {
         {filteredFeatures.map((feature) => (
           <FeatureItem key={feature.id} feature={feature} />
         ))}
-      </div>
-
-      <div className="p-3 border-t border-zinc-800">
-        <div className="text-xs text-zinc-500">Parts (1)</div>
-        <div className="flex items-center gap-2 px-2 py-1 mt-1 text-sm hover:bg-zinc-800/50 rounded cursor-pointer">
-          <Box className="size-4" />
-          <span>Part 1</span>
-        </div>
       </div>
     </div>
   )

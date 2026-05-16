@@ -57,8 +57,6 @@ const initialFeatures: Feature[] = [
       { id: 'right', name: 'Right Plane', type: 'plane' },
     ],
   },
-  { id: 'sketch1', name: 'Sketch 1', type: 'sketch' },
-  { id: 'sketch2', name: 'Sketch 2', type: 'sketch' },
   { id: 'baseBody', name: 'Base Body', type: 'extrude' },
   { id: 'mountingHole', name: 'Mounting Hole', type: 'hole' },
   { id: 'edgeRounds', name: 'Edge Rounds', type: 'fillet' },
