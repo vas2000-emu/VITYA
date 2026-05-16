@@ -59,6 +59,12 @@ export interface ManufacturingIssue {
 // Panel types
 export type RightPanelType = 'ai' | 'manufacturing'
 
+// Chat
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 // ---------------------------------------------------------------------------
 // MoldLocal results dashboard types
 // Shape mirrors the future backend response so the frontend can be wired
