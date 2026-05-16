@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Grid, Environment, ContactShadows } from '@react-three/drei'
+import { Grid, Environment, ContactShadows, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { CameraController } from './CameraController'
 import { Part } from './Part'
@@ -43,8 +43,8 @@ export function Scene() {
       key={remountKey}
       shadows
       dpr={[1, 2]}
-      camera={{ position: [220, 160, 220], fov: 45, near: 1, far: 2000 }}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      camera={{ position: [220, 160, 220], fov: 45, near: 10, far: 1500 }}
+      gl={{ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: false }}
       onCreated={({ gl }) => {
         const canvas = gl.domElement
         restoreExt.current = gl.getContext().getExtension('WEBGL_lose_context')
@@ -87,7 +87,7 @@ export function Scene() {
 
       {showGrid && (
         <Grid
-          position={[0, -40, 0]}
+          position={[0, -42, 0]}
           args={[600, 600]}
           cellSize={20}
           cellThickness={0.6}
@@ -102,7 +102,7 @@ export function Scene() {
       )}
 
       <ContactShadows
-        position={[0, -39.5, 0]}
+        position={[0, -41.5, 0]}
         opacity={0.45}
         scale={300}
         blur={2.4}
@@ -110,6 +110,16 @@ export function Scene() {
       />
 
       <Environment preset="city" />
+
+      {/* Axes gizmo in the bottom-right corner. Rotates with the camera
+          so the user always knows which way is X/Y/Z. Clicking an axis
+          handle snaps the camera to that view. */}
+      <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
+        <GizmoViewport
+          axisColors={['#ef4444', '#22c55e', '#3b82f6']}
+          labelColor="#fafafa"
+        />
+      </GizmoHelper>
 
       <CameraController />
     </Canvas>
