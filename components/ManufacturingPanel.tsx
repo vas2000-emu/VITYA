@@ -38,8 +38,39 @@ interface IssueItemProps {
   issue: ManufacturingIssue
 }
 
+// Maps issue ID → the camera action to take when highlighting.
+// Issue 1 = undercut on sensor bosses (back face) → mounting hole override
+// Issue 2 = draft on side faces → front view
+// Issue 3 = wall thickness (all walls) → isometric
+// Issue 4 = top face draft → top view
+// Issue 5 = parting line at Z=20mm → right view
+const ISSUE_VIEW: Record<string, 'mountingHole' | 'front' | 'isometric' | 'top' | 'right'> = {
+  '1': 'mountingHole',
+  '2': 'front',
+  '3': 'isometric',
+  '4': 'top',
+  '5': 'right',
+}
+
 function IssueItem({ issue }: IssueItemProps) {
   const [expanded, setExpanded] = useState(false)
+  const setViewportView = useAppStore((s) => s.setViewportView)
+  const selectFeature = useAppStore((s) => s.selectFeature)
+  const heatmap = useAppStore((s) => s.viewportHeatmap)
+  const toggleHeatmap = useAppStore((s) => s.toggleViewportHeatmap)
+
+  const handleHighlight = () => {
+    if (!heatmap) toggleHeatmap()
+    const target = ISSUE_VIEW[issue.id]
+    if (target === 'mountingHole') {
+      selectFeature('mountingHole')
+    } else if (target) {
+      setViewportView(target)
+    }
+    toast.success(`Highlighted ${issue.location ?? issue.title}`, {
+      description: 'Camera moved to the issue location.',
+    })
+  }
 
   return (
     <div className={`border rounded-lg overflow-hidden ${issueBgColors[issue.type]}`}>
@@ -72,11 +103,7 @@ function IssueItem({ issue }: IssueItemProps) {
           )}
           <button
             type="button"
-            onClick={() =>
-              toast(`Highlighting ${issue.location ?? issue.title}`, {
-                description: 'Location marked in the 3D viewport.',
-              })
-            }
+            onClick={handleHighlight}
             className="w-full px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"
           >
             Highlight in 3D View

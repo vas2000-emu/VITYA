@@ -70,6 +70,7 @@ export function LandingPage() {
         <div className="flex items-center gap-4">
           <button
             type="button"
+            onClick={() => toast('Region selection coming soon', { description: 'Currently serving US suppliers only.' })}
             className="flex items-center gap-1 px-3 py-2 text-sm hover:bg-zinc-800 rounded"
           >
             US
