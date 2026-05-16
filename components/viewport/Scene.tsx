@@ -111,11 +111,13 @@ export function Scene() {
 
       <Environment preset="city" />
 
-      {/* Axes gizmo in the bottom-right corner. Rotates with the camera
-          so the user always knows which way is X/Y/Z. Clicking an axis
-          handle snaps the camera to that view. */}
+      {/* Axes gizmo in the bottom-right corner. Standard three.js
+          convention: X-right (red), Y-up (green), Z-toward-viewer
+          (blue). Rotates with the camera; clicking an axis handle
+          snaps the camera to that view. */}
       <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
         <GizmoViewport
+          labels={['X', 'Y', 'Z']}
           axisColors={['#ef4444', '#22c55e', '#3b82f6']}
           labelColor="#fafafa"
         />
