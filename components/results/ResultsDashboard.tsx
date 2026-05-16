@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, Cpu, RotateCcw, RefreshCw } from 'lucide-react'
 import { useResultsStore } from '@/store/useResultsStore'
@@ -11,8 +12,24 @@ import { ReadinessChecklist } from './ReadinessChecklist'
 import { LoadingScreen } from './LoadingScreen'
 
 export function ResultsDashboard() {
-  const { analysis, fixedIssueIds, resetFixes, loading, simulateAnalysis } =
-    useResultsStore()
+  const {
+    analysis,
+    fixedIssueIds,
+    resetFixes,
+    loading,
+    simulateAnalysis,
+    selectIssue,
+  } = useResultsStore()
+
+  // Pre-select an issue when the dashboard is opened via a ribbon link
+  // like /results?focus=undercut-1. Falls through silently if no match.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const focusId = new URLSearchParams(window.location.search).get('focus')
+    if (focusId && analysis.issues.some((i) => i.id === focusId)) {
+      selectIssue(focusId)
+    }
+  }, [analysis.issues, selectIssue])
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100">
