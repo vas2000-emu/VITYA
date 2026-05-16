@@ -4,13 +4,23 @@ import { moldAnalysisData, partsLibrary } from '@/lib/mockMoldAnalysis'
 import { useAppStore } from '@/store/useAppStore'
 import type { MoldAnalysisResult, PartId } from '@/lib/types'
 
+/**
+ * Loading phases shown by LoadingScreen. Each phase has a label and a
+ * minimum duration so the simulated analysis feels like real work rather
+ * than a sequence of 100ms blips. Sum is ~5s — long enough to feel real,
+ * short enough not to bore.
+ */
 export const LOADING_PHASES = [
-  'Parsing STEP geometry',
-  'Detecting features (holes, bosses, ribs)',
-  'Checking draft angles and undercuts',
-  'Querying Michigan supplier readiness',
-  'Generating recommendations',
+  { label: 'Parsing geometry…', ms: 800 },
+  { label: 'Computing surface normals…', ms: 550 },
+  { label: 'Sampling wall thickness…', ms: 1100 },
+  { label: 'Detecting undercuts…', ms: 700 },
+  { label: 'Estimating cost via Michigan ABS norms…', ms: 900 },
+  { label: 'Querying supplier readiness…', ms: 600 },
+  { label: 'Compiling report…', ms: 400 },
 ] as const
+
+export const LOADING_PHASE_LABELS = LOADING_PHASES.map((p) => p.label)
 
 interface ResultsState {
   analysis: MoldAnalysisResult
@@ -54,8 +64,8 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   showFix: false,
 
   loading: false,
-  loadingPhase: LOADING_PHASES[0],
-  setLoading: (loading, phase = LOADING_PHASES[0]) => set({ loading, loadingPhase: phase }),
+  loadingPhase: LOADING_PHASES[0].label,
+  setLoading: (loading, phase = LOADING_PHASES[0].label) => set({ loading, loadingPhase: phase }),
   setAnalysis: (analysis) =>
     set({
       analysis,
@@ -131,13 +141,13 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     const myToken = ++simulateToken
     for (const phase of LOADING_PHASES) {
       if (myToken !== simulateToken) return // a newer run replaced us
-      set({ loading: true, loadingPhase: phase })
-      await new Promise((r) => setTimeout(r, 550))
+      set({ loading: true, loadingPhase: phase.label })
+      await new Promise((r) => setTimeout(r, phase.ms))
     }
     if (myToken !== simulateToken) return
     set({
       loading: false,
-      loadingPhase: LOADING_PHASES[0],
+      loadingPhase: LOADING_PHASES[0].label,
       fixedIssueIds: [],
       pendingFixId: null,
       showFix: false,
