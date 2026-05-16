@@ -239,17 +239,21 @@ function EvaluateRibbon() {
   return (
     <>
       <RibbonGroup bordered>
-        <RibbonLink href="/results?focus=undercut-1" icon={Box} label="Undercut Analysis" />
-        <RibbonLink href="/results?focus=draft-1" icon={Triangle} label="Draft Analysis" />
+        <RibbonLink href="/analysis/undercut" icon={Box} label="Undercut Analysis" />
+        <RibbonLink href="/analysis/draft" icon={Triangle} label="Draft Analysis" />
         <RibbonLink
-          href="/results?focus=thin-wall-1"
+          href="/analysis/thickness"
           icon={Layers3}
           label="Thickness Analysis"
         />
       </RibbonGroup>
       <RibbonGroup>
-        <RibbonLink href="/results" icon={DollarSign} label="Costing" />
-        <RibbonLink href="/results" icon={Factory} label="On Demand Manufacturing" />
+        <RibbonLink href="/analysis/costing" icon={DollarSign} label="Costing" />
+        <RibbonLink
+          href="/analysis/on-demand"
+          icon={Factory}
+          label="On Demand Manufacturing"
+        />
         <RibbonLink href="/results" icon={ClipboardCheck} label="Part Reviewer" />
       </RibbonGroup>
     </>
