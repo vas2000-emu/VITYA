@@ -10,6 +10,7 @@ const PART_NAMES: Record<string, string> = {
   bracket: 'Plastic Bracket — bracket.stl',
   phoneCase: 'Phone Case Back — phone_case.stl',
   droneArm: 'Drone Arm — drone_arm.stl',
+  bumper: 'Front Bumper Fascia — bumper.stl',
 }
 
 /**

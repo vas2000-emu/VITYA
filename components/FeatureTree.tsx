@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
 import type { Feature, FeatureType } from '@/lib/types'
 
@@ -28,6 +29,50 @@ const featureIcons: Record<FeatureType, React.ReactNode> = {
   origin: <Circle className="size-4 text-zinc-500" />,
 }
 
+// Per-feature metadata surfaced on click. Datum planes additionally
+// snap the camera (handled by CameraController.FEATURE_VIEW). Sketches,
+// bodies, holes, and fillets show a toast with realistic CAD context
+// so the user knows what each feature represents instead of getting a
+// silent highlight.
+const FEATURE_INFO: Record<string, { description: string; detail: string }> = {
+  origin: {
+    description: 'Origin datum',
+    detail: 'World coordinate root. Camera snapped to isometric view.',
+  },
+  top: {
+    description: 'Top Plane (XZ)',
+    detail: 'Datum at Y = 0. Camera snapped to top view.',
+  },
+  front: {
+    description: 'Front Plane (XY)',
+    detail: 'Datum at Z = 0. Camera snapped to front view.',
+  },
+  right: {
+    description: 'Right Plane (YZ)',
+    detail: 'Datum at X = 0. Camera snapped to right view.',
+  },
+  sketch1: {
+    description: 'Sketch 1 — 2D profile',
+    detail: 'References Top Plane · 4 lines, 2 arcs, fully constrained.',
+  },
+  sketch2: {
+    description: 'Sketch 2 — 2D profile',
+    detail: 'References Front Plane · rib outline, 3 lines, fully constrained.',
+  },
+  baseBody: {
+    description: 'Base Body (Extrude)',
+    detail: 'Extrude Sketch 1 by 12 mm · merge · main bracket footprint.',
+  },
+  mountingHole: {
+    description: 'Mounting Hole',
+    detail: 'Through-hole, Ø6.5 mm × 2 instances · pattern on base.',
+  },
+  edgeRounds: {
+    description: 'Edge Rounds (Fillet)',
+    detail: '2 mm radius on top edges · 12 edges selected.',
+  },
+}
+
 interface FeatureItemProps {
   feature: Feature
   level?: number
@@ -39,6 +84,16 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
   const { selectedFeature, selectFeature } = useAppStore()
   const hasChildren = feature.children && feature.children.length > 0
 
+  const handleSelect = () => {
+    selectFeature(feature.id)
+    const info = FEATURE_INFO[feature.id]
+    if (info) {
+      toast(info.description, { description: info.detail })
+    } else {
+      toast(feature.name, { description: `${feature.type} feature selected.` })
+    }
+  }
+
   return (
     <div>
       <div
@@ -46,7 +101,7 @@ function FeatureItem({ feature, level = 0 }: FeatureItemProps) {
           selectedFeature === feature.id ? 'bg-blue-500/20' : ''
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
-        onClick={() => selectFeature(feature.id)}
+        onClick={handleSelect}
       >
         {hasChildren ? (
           <button

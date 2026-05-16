@@ -1,6 +1,6 @@
 'use client'
 
-import { Box, Smartphone, Plane, Check } from 'lucide-react'
+import { Box, Smartphone, Plane, Car, Check } from 'lucide-react'
 import { useResultsStore, computeCurrentScore } from '@/store/useResultsStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { PartId } from '@/lib/types'
@@ -9,6 +9,7 @@ const ICONS: Record<PartId, React.ReactNode> = {
   bracket: <Box className="size-5" />,
   phoneCase: <Smartphone className="size-5" />,
   droneArm: <Plane className="size-5" />,
+  bumper: <Car className="size-5" />,
 }
 
 /**

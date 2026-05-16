@@ -69,4 +69,25 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     has_sharp_corners: false,
     has_uniform_wall: false, // long span + concentrated mount → non-uniform
   },
+  bumper: {
+    // Front fascia bumper — large automotive cosmetic part. The biggest
+    // part in the library by every dimension, which drives the moldsim
+    // numbers (huge tooling, long cycle, high flow ratio).
+    material: 'PP',
+    wall_thickness: 3.0,
+    part_volume: 1200, // cm³
+    part_weight: 1100, // g
+    projected_area: 6500, // cm²
+    part_length: 1700, // mm — full automotive width
+    part_width: 450, // mm — bumper depth
+    melt_temp: 230,
+    mold_temp: 50,
+    production_quantity: 50_000, // automotive volumes
+    complexity: 'very_complex',
+    num_cavities: 1, // single huge tool
+    num_undercuts: 3, // sensor mounts + license plate recess + fog lights
+    min_draft_angle: 2.0,
+    has_sharp_corners: false,
+    has_uniform_wall: false, // wraparound ends taper, grille area thinner
+  },
 }

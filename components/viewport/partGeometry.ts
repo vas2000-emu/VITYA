@@ -9,32 +9,31 @@ import * as THREE from 'three'
  * are only used when no `uploadedSTL` is set in the store.
  */
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm'
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
 
-/** L-shaped plastic bracket with two mounting holes through the base.
- *  Primitives are sized so they butt against each other rather than
- *  overlap — overlapping primitives produce coincident internal faces
- *  that z-fight under shading. */
+/** L-shaped plastic bracket. Primitives have 2-unit overlaps along the
+ *  shared faces so there's no visible gap from anti-aliasing — without
+ *  the overlap the rib/hook can read as floating just off the body. */
 function buildBracketGeometry(): THREE.BufferGeometry {
   // Base plate: full footprint, 12mm thick, sitting at the bottom.
   const baseGeom = new THREE.BoxGeometry(120, 12, 90)
   baseGeom.translate(0, -22, 0) // base spans y = -28..-16
 
-  // Vertical wall: sits on the LEFT EDGE of the base, growing upward
-  // from the base's top face. No overlap with the base interior.
-  const wallGeom = new THREE.BoxGeometry(12, 48, 90)
-  wallGeom.translate(-54, 8, 0) // wall spans y = -16..32, x = -60..-48
+  // Vertical wall: sits on the left edge of the base, overlapping the
+  // base top by 2 units so the junction reads as solid.
+  const wallGeom = new THREE.BoxGeometry(12, 50, 90)
+  wallGeom.translate(-54, 7, 0) // wall spans y = -18..32
 
-  // Stiffener rib: a triangular-ish prism sitting on top of the base,
-  // tucked against the wall. Stops short of the wall's outer face so it
-  // doesn't share a plane with the wall.
-  const ribGeom = new THREE.BoxGeometry(28, 22, 10)
-  ribGeom.translate(-34, -5, 0) // rib spans y = -16..6, x = -48..-20
+  // Stiffener rib: tucked between the base top and the wall's right
+  // face. 2-unit overlap into the wall (x = -50 vs wall right edge -48).
+  const ribGeom = new THREE.BoxGeometry(34, 24, 14)
+  ribGeom.translate(-33, -6, 0) // rib spans y = -18..6, x = -50..-16
 
-  // The snap-fit hook (intentionally undercut — that's the "issue"). Sits
-  // on TOP of the wall, slightly forward.
-  const hookGeom = new THREE.BoxGeometry(8, 6, 22)
-  hookGeom.translate(-44, 35, 0) // hook spans y = 32..38
+  // Snap-fit hook protruding from the right side of the wall. Overlaps
+  // 2 units INTO the wall on the x axis (hook left edge x=-49 vs wall
+  // right edge x=-48) so it reads as joined, not floating.
+  const hookGeom = new THREE.BoxGeometry(10, 8, 22)
+  hookGeom.translate(-44, 26, 0) // hook spans y = 22..30, x = -49..-39
 
   return mergeGeometries([baseGeom, wallGeom, ribGeom, hookGeom])
 }
@@ -110,10 +109,77 @@ function buildDroneArmGeometry(): THREE.BufferGeometry {
   return mergeGeometries([center, arm, mount, motor])
 }
 
+/** Automotive front bumper fascia. Long horizontal beam, two
+ *  wraparound ends, lower lip, two fog-light bezel pockets, and a pair
+ *  of sensor-mount bosses on the BACK face that drive the "undercut"
+ *  issue in the mock data. All sub-features overlap the beam by ≥1
+ *  unit on shared axes — no coincident faces to z-fight. */
+function buildBumperGeometry(): THREE.BufferGeometry {
+  // Main horizontal beam. z spans -8..8.
+  const beam = new THREE.BoxGeometry(180, 30, 16)
+  beam.translate(0, 5, 0)
+
+  // Top lip that catches air. Sits flush ON TOP of the beam (y overlap)
+  // and PROTRUDES forward of the beam's +z face — its back face is at
+  // z=7, 1 unit INSIDE the beam, so no coincident-face fight.
+  const topLip = new THREE.BoxGeometry(160, 8, 6)
+  topLip.translate(0, 22, 10) // y = 18..26 (overlap beam top), z = 7..13
+
+  // Lower air-dam spoiler — hangs below beam, slight forward bias.
+  const lowerLip = new THREE.BoxGeometry(150, 10, 8)
+  lowerLip.translate(0, -13, 6) // y = -18..-8 (overlap beam bottom), z = 2..10
+
+  // Left wraparound end — angled box rotated to taper back toward the
+  // body. Positioned just past the beam's left edge, with 2-unit
+  // overlap on x so the joint reads as solid.
+  const leftWrap = new THREE.BoxGeometry(28, 28, 14)
+  leftWrap.rotateY(-Math.PI / 6)
+  leftWrap.translate(-98, 5, -4)
+
+  const rightWrap = new THREE.BoxGeometry(28, 28, 14)
+  rightWrap.rotateY(Math.PI / 6)
+  rightWrap.translate(98, 5, -4)
+
+  // Fog-light bezels — protrude from the front face. Back face at z=9
+  // is 1 unit forward of beam's +z face (z=8), so no coincidence.
+  const fogLeft = new THREE.BoxGeometry(20, 16, 5)
+  fogLeft.translate(-78, -2, 11) // z = 8.5..13.5 (back face 0.5 unit forward of beam)
+  const fogRight = new THREE.BoxGeometry(20, 16, 5)
+  fogRight.translate(78, -2, 11)
+
+  // Central grille — protrudes slightly. Back face at z=9 forward of
+  // beam's +z=8 face.
+  const grille = new THREE.BoxGeometry(64, 20, 4)
+  grille.translate(0, 2, 11) // z = 9..13
+
+  // Sensor-mount bosses on the BACK face (z<0). 1-unit overlap into the
+  // beam's -z face for a clean joint.
+  const sensorR = new THREE.CylinderGeometry(7, 7, 8, 16)
+  sensorR.rotateX(Math.PI / 2)
+  sensorR.translate(78, -2, -11) // z = -15..-7 (1-unit overlap into beam back face z=-8)
+  const sensorL = new THREE.CylinderGeometry(7, 7, 8, 16)
+  sensorL.rotateX(Math.PI / 2)
+  sensorL.translate(-78, -2, -11)
+
+  return mergeGeometries([
+    beam,
+    topLip,
+    lowerLip,
+    leftWrap,
+    rightWrap,
+    fogLeft,
+    fogRight,
+    grille,
+    sensorL,
+    sensorR,
+  ])
+}
+
 const BUILDERS: Record<PartId, () => THREE.BufferGeometry> = {
   bracket: buildBracketGeometry,
   phoneCase: buildPhoneCaseGeometry,
   droneArm: buildDroneArmGeometry,
+  bumper: buildBumperGeometry,
 }
 
 const cache = new Map<PartId, THREE.BufferGeometry>()

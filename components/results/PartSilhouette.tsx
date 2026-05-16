@@ -19,6 +19,8 @@ export function PartSilhouette({ partId }: { partId: PartId }) {
       return <PhoneCaseSilhouette />
     case 'droneArm':
       return <DroneArmSilhouette />
+    case 'bumper':
+      return <BumperSilhouette />
     default:
       return null
   }
@@ -256,6 +258,94 @@ function DroneArmSilhouette() {
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
         <text x="200" y="190" textAnchor="middle">180 mm arm</text>
         <text x="320" y="200" textAnchor="middle">Ø60 motor mount</text>
+      </g>
+    </svg>
+  )
+}
+
+/** Automotive front bumper viewed head-on: long horizontal beam with
+ *  wraparound ends, a central grille indent, two fog-light bezels, top
+ *  lip, and a lower air dam. */
+function BumperSilhouette() {
+  return (
+    <svg
+      viewBox="0 0 400 300"
+      className="absolute inset-0 w-full h-full"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <Defs />
+      <GridFloor />
+
+      {/* Ground shadow */}
+      <ellipse cx="200" cy="222" rx="170" ry="6" fill="#000" opacity="0.3" />
+
+      <g>
+        {/* Wraparound ends — angled trapezoids at the very edges */}
+        <path
+          d="M 30 130 L 60 105 L 60 195 L 30 215 Z"
+          fill="url(#partFill)"
+          stroke="url(#partEdge)"
+          strokeWidth="1.5"
+        />
+        <path
+          d="M 370 130 L 340 105 L 340 195 L 370 215 Z"
+          fill="url(#partFill)"
+          stroke="url(#partEdge)"
+          strokeWidth="1.5"
+        />
+
+        {/* Main horizontal beam */}
+        <rect
+          x="60"
+          y="100"
+          width="280"
+          height="100"
+          fill="url(#partFill)"
+          stroke="url(#partEdge)"
+          strokeWidth="1.5"
+        />
+
+        {/* Top lip — sits flush along the top edge of the beam */}
+        <rect x="68" y="92" width="264" height="12" fill="#52525b" stroke="#a1a1aa" strokeWidth="0.8" />
+
+        {/* Lower air dam */}
+        <rect x="72" y="198" width="256" height="14" fill="#3f3f46" stroke="#71717a" strokeWidth="0.8" />
+
+        {/* Central grille indent — slightly recessed (darker) */}
+        <rect
+          x="155"
+          y="125"
+          width="90"
+          height="50"
+          fill="#1f1f23"
+          stroke="#71717a"
+          strokeWidth="1"
+        />
+        {/* Horizontal grille slats */}
+        {[0, 1, 2, 3].map((i) => (
+          <line
+            key={`slat-${i}`}
+            x1="160"
+            x2="240"
+            y1={134 + i * 11}
+            y2={134 + i * 11}
+            stroke="#52525b"
+            strokeWidth="1.4"
+          />
+        ))}
+
+        {/* Fog-light bezels — circles on either side of the grille */}
+        <circle cx="100" cy="160" r="18" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
+        <circle cx="100" cy="160" r="9" fill="#27272a" />
+        <circle cx="300" cy="160" r="18" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
+        <circle cx="300" cy="160" r="9" fill="#27272a" />
+      </g>
+
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="240" textAnchor="middle">1700 mm</text>
+        <text x="20" y="160" textAnchor="middle" transform="rotate(-90 20 160)">
+          450 mm
+        </text>
       </g>
     </svg>
   )

@@ -86,28 +86,28 @@ solid exported
 	facet normal 1 0 0
 		outer loop
 			vertex -48 32 45
-			vertex -48 -28 45
+			vertex -48 -18 45
 			vertex -48 32 -45
 		endloop
 	endfacet
 	facet normal 1 0 0
 		outer loop
-			vertex -48 -28 45
-			vertex -48 -28 -45
+			vertex -48 -18 45
+			vertex -48 -18 -45
 			vertex -48 32 -45
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
 			vertex -60 32 -45
-			vertex -60 -28 -45
+			vertex -60 -18 -45
 			vertex -60 32 45
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
-			vertex -60 -28 -45
-			vertex -60 -28 45
+			vertex -60 -18 -45
+			vertex -60 -18 45
 			vertex -60 32 45
 		endloop
 	endfacet
@@ -127,212 +127,212 @@ solid exported
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -60 -28 45
-			vertex -60 -28 -45
-			vertex -48 -28 45
+			vertex -60 -18 45
+			vertex -60 -18 -45
+			vertex -48 -18 45
 		endloop
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -60 -28 -45
-			vertex -48 -28 -45
-			vertex -48 -28 45
+			vertex -60 -18 -45
+			vertex -48 -18 -45
+			vertex -48 -18 45
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
 			vertex -60 32 45
-			vertex -60 -28 45
+			vertex -60 -18 45
 			vertex -48 32 45
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
-			vertex -60 -28 45
-			vertex -48 -28 45
+			vertex -60 -18 45
+			vertex -48 -18 45
 			vertex -48 32 45
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
 			vertex -48 32 -45
-			vertex -48 -28 -45
+			vertex -48 -18 -45
 			vertex -60 32 -45
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
-			vertex -48 -28 -45
-			vertex -60 -28 -45
+			vertex -48 -18 -45
+			vertex -60 -18 -45
 			vertex -60 32 -45
 		endloop
 	endfacet
 	facet normal 1 0 0
 		outer loop
-			vertex -21 13 6
-			vertex -21 -17 6
-			vertex -21 13 -6
+			vertex -16 6 7
+			vertex -16 -18 7
+			vertex -16 6 -7
 		endloop
 	endfacet
 	facet normal 1 0 0
 		outer loop
-			vertex -21 -17 6
-			vertex -21 -17 -6
-			vertex -21 13 -6
+			vertex -16 -18 7
+			vertex -16 -18 -7
+			vertex -16 6 -7
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
-			vertex -51 13 -6
-			vertex -51 -17 -6
-			vertex -51 13 6
+			vertex -50 6 -7
+			vertex -50 -18 -7
+			vertex -50 6 7
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
-			vertex -51 -17 -6
-			vertex -51 -17 6
-			vertex -51 13 6
+			vertex -50 -18 -7
+			vertex -50 -18 7
+			vertex -50 6 7
 		endloop
 	endfacet
 	facet normal 0 1 0
 		outer loop
-			vertex -51 13 -6
-			vertex -51 13 6
-			vertex -21 13 -6
+			vertex -50 6 -7
+			vertex -50 6 7
+			vertex -16 6 -7
 		endloop
 	endfacet
 	facet normal 0 1 0
 		outer loop
-			vertex -51 13 6
-			vertex -21 13 6
-			vertex -21 13 -6
+			vertex -50 6 7
+			vertex -16 6 7
+			vertex -16 6 -7
 		endloop
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -51 -17 6
-			vertex -51 -17 -6
-			vertex -21 -17 6
+			vertex -50 -18 7
+			vertex -50 -18 -7
+			vertex -16 -18 7
 		endloop
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -51 -17 -6
-			vertex -21 -17 -6
-			vertex -21 -17 6
+			vertex -50 -18 -7
+			vertex -16 -18 -7
+			vertex -16 -18 7
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
-			vertex -51 13 6
-			vertex -51 -17 6
-			vertex -21 13 6
+			vertex -50 6 7
+			vertex -50 -18 7
+			vertex -16 6 7
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
-			vertex -51 -17 6
-			vertex -21 -17 6
-			vertex -21 13 6
+			vertex -50 -18 7
+			vertex -16 -18 7
+			vertex -16 6 7
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
-			vertex -21 13 -6
-			vertex -21 -17 -6
-			vertex -51 13 -6
+			vertex -16 6 -7
+			vertex -16 -18 -7
+			vertex -50 6 -7
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
-			vertex -21 -17 -6
-			vertex -51 -17 -6
-			vertex -51 13 -6
+			vertex -16 -18 -7
+			vertex -50 -18 -7
+			vertex -50 6 -7
 		endloop
 	endfacet
 	facet normal 1 0 0
 		outer loop
-			vertex -40 27 12
-			vertex -40 21 12
-			vertex -40 27 -12
+			vertex -39 30 11
+			vertex -39 22 11
+			vertex -39 30 -11
 		endloop
 	endfacet
 	facet normal 1 0 0
 		outer loop
-			vertex -40 21 12
-			vertex -40 21 -12
-			vertex -40 27 -12
+			vertex -39 22 11
+			vertex -39 22 -11
+			vertex -39 30 -11
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
-			vertex -48 27 -12
-			vertex -48 21 -12
-			vertex -48 27 12
+			vertex -49 30 -11
+			vertex -49 22 -11
+			vertex -49 30 11
 		endloop
 	endfacet
 	facet normal -1 0 0
 		outer loop
-			vertex -48 21 -12
-			vertex -48 21 12
-			vertex -48 27 12
+			vertex -49 22 -11
+			vertex -49 22 11
+			vertex -49 30 11
 		endloop
 	endfacet
 	facet normal 0 1 0
 		outer loop
-			vertex -48 27 -12
-			vertex -48 27 12
-			vertex -40 27 -12
+			vertex -49 30 -11
+			vertex -49 30 11
+			vertex -39 30 -11
 		endloop
 	endfacet
 	facet normal 0 1 0
 		outer loop
-			vertex -48 27 12
-			vertex -40 27 12
-			vertex -40 27 -12
+			vertex -49 30 11
+			vertex -39 30 11
+			vertex -39 30 -11
 		endloop
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -48 21 12
-			vertex -48 21 -12
-			vertex -40 21 12
+			vertex -49 22 11
+			vertex -49 22 -11
+			vertex -39 22 11
 		endloop
 	endfacet
 	facet normal 0 -1 0
 		outer loop
-			vertex -48 21 -12
-			vertex -40 21 -12
-			vertex -40 21 12
+			vertex -49 22 -11
+			vertex -39 22 -11
+			vertex -39 22 11
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
-			vertex -48 27 12
-			vertex -48 21 12
-			vertex -40 27 12
+			vertex -49 30 11
+			vertex -49 22 11
+			vertex -39 30 11
 		endloop
 	endfacet
 	facet normal 0 0 1
 		outer loop
-			vertex -48 21 12
-			vertex -40 21 12
-			vertex -40 27 12
+			vertex -49 22 11
+			vertex -39 22 11
+			vertex -39 30 11
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
-			vertex -40 27 -12
-			vertex -40 21 -12
-			vertex -48 27 -12
+			vertex -39 30 -11
+			vertex -39 22 -11
+			vertex -49 30 -11
 		endloop
 	endfacet
 	facet normal 0 0 -1
 		outer loop
-			vertex -40 21 -12
-			vertex -48 21 -12
-			vertex -48 27 -12
+			vertex -39 22 -11
+			vertex -49 22 -11
+			vertex -49 30 -11
 		endloop
 	endfacet
 endsolid exported

@@ -1,9 +1,25 @@
 'use client'
 
 import { useRef, useState, useEffect, type DragEvent } from 'react'
-import { Upload, ChevronUp, FileBox, FolderOpen, Trash2 } from 'lucide-react'
+import { Upload, ChevronUp, Box, Smartphone, Plane, Car, FolderOpen, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
+import { useResultsStore } from '@/store/useResultsStore'
+import type { PartId } from '@/lib/types'
+
+// Sample STLs bundled in public/parts/. Selecting one loads the file
+// AND switches the active part so the dashboard's analysis follows.
+const SAMPLES: Array<{
+  partId: PartId
+  file: string
+  label: string
+  icon: React.ReactNode
+}> = [
+  { partId: 'bracket', file: 'bracket.stl', label: 'Plastic Bracket', icon: <Box className="size-4" /> },
+  { partId: 'phoneCase', file: 'phone_case.stl', label: 'Phone Case Back', icon: <Smartphone className="size-4" /> },
+  { partId: 'droneArm', file: 'drone_arm.stl', label: 'Drone Arm', icon: <Plane className="size-4" /> },
+  { partId: 'bumper', file: 'bumper.stl', label: 'Front Bumper Fascia', icon: <Car className="size-4" /> },
+]
 
 /**
  * Drag-drop + drop-up menu controlling the STL source.
@@ -22,6 +38,8 @@ export function STLDropzone({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const uploadedSTL = useAppStore((s) => s.uploadedSTL)
   const setUploadedSTL = useAppStore((s) => s.setUploadedSTL)
+  const setCurrentPartId = useAppStore((s) => s.setCurrentPartId)
+  const selectPart = useResultsStore((s) => s.selectPart)
 
   // Click-outside closes the menu.
   useEffect(() => {
@@ -49,20 +67,25 @@ export function STLDropzone({ children }: { children: React.ReactNode }) {
     })
   }
 
-  const loadSample = async () => {
+  const loadSample = async (sample: (typeof SAMPLES)[number]) => {
     setMenuOpen(false)
     try {
-      const res = await fetch('/parts/bracket.stl')
+      const res = await fetch(`/parts/${sample.file}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
-      if (uploadedSTL) URL.revokeObjectURL(uploadedSTL)
+      // Switch the dashboard's active part (also fires moldsim API
+      // for the new part). selectPart clears uploadedSTL internally,
+      // so we set it AFTER selectPart so the STL takes precedence
+      // over the procedural geometry for this part.
+      selectPart(sample.partId)
       const url = URL.createObjectURL(blob)
       setUploadedSTL(url)
-      toast.success('Loaded sample STL', {
-        description: 'bracket.stl — same geometry as the demo bracket, served as a real STL',
+      setCurrentPartId(sample.partId)
+      toast.success(`Loaded ${sample.label}`, {
+        description: `${sample.file} — analysis + part library now point at this sample.`,
       })
     } catch (err) {
-      toast.error('Could not load sample STL', { description: String(err) })
+      toast.error(`Could not load ${sample.file}`, { description: String(err) })
     }
   }
 
@@ -112,11 +135,17 @@ export function STLDropzone({ children }: { children: React.ReactNode }) {
         </button>
 
         {menuOpen && (
-          <div className="absolute bottom-full mb-2 left-0 min-w-[220px] bg-zinc-900/95 backdrop-blur border border-zinc-700 rounded-md shadow-lg overflow-hidden">
-            <MenuItem icon={<FileBox className="size-4" />} onClick={loadSample}>
-              <span className="flex-1">Load sample STL</span>
-              <span className="text-[10px] text-zinc-500">bracket.stl</span>
-            </MenuItem>
+          <div className="absolute bottom-full mb-2 left-0 min-w-[260px] bg-zinc-900/95 backdrop-blur border border-zinc-700 rounded-md shadow-lg overflow-hidden">
+            <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 bg-zinc-950/40">
+              Sample STLs
+            </div>
+            {SAMPLES.map((s) => (
+              <MenuItem key={s.partId} icon={s.icon} onClick={() => loadSample(s)}>
+                <span className="flex-1">{s.label}</span>
+                <span className="text-[10px] text-zinc-500">{s.file}</span>
+              </MenuItem>
+            ))}
+            <div className="h-px bg-zinc-800 my-1" />
             <MenuItem icon={<FolderOpen className="size-4" />} onClick={pickFile}>
               Upload .stl from computer…
             </MenuItem>

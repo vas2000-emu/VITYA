@@ -261,10 +261,119 @@ const droneArm: MoldAnalysisResult = {
   ],
 }
 
+const bumper: MoldAnalysisResult = {
+  partId: 'bumper',
+  partName: 'Automotive Front Bumper Fascia',
+  partSummary: 'Cosmetic front fascia for a passenger vehicle, polypropylene, 1.7m wide with integrated fog-light bezels.',
+  overallScore: 42,
+  improvedScore: 71,
+  riskSummary: [
+    {
+      label: 'Michigan readiness',
+      value: '42/100',
+      description: 'Only tier-1 automotive molders can handle a tool this size locally.',
+    },
+    {
+      label: 'Moldability',
+      value: '48/100',
+      description: 'Long flow path + thin cosmetic sections drive knit-line and sink risk.',
+    },
+    {
+      label: 'Cost risk',
+      value: 'High',
+      description: 'Hardened multi-cavity tool + side actions for sensor mounts dominate cost.',
+    },
+    {
+      label: 'Lead time',
+      value: 'Long',
+      description: 'Mold flow validation, tool build, and PPAP add 14-18 weeks before SOP.',
+    },
+  ],
+  issues: [
+    {
+      id: 'knit-line-1',
+      title: 'Knit lines around fog light openings',
+      severity: 'high',
+      location: 'fog-light bezel pockets',
+      whyItMatters:
+        'Flow fronts meeting behind the openings produce visible cosmetic lines on the painted surface.',
+      costImpact: 'Cosmetic rejects at paint inspection; second-stage rework adds ~$0.40/part.',
+      leadTimeImpact: 'Mold flow simulation + gate re-balancing adds 1-2 weeks to design.',
+      recommendation: 'Add a hot-tip gate near each fog opening or relocate runners for balanced fill.',
+      scoreImpact: '+12',
+      beforeScore: 42,
+      afterScore: 54,
+      hotspot: { top: '58%', left: '22%', label: 'Knit' },
+      region: { min: [-95, -8, -6], max: [-65, 6, 12] },
+    },
+    {
+      id: 'sink-bumper-1',
+      title: 'Sink risk on long upper span',
+      severity: 'high',
+      location: 'top horizontal beam',
+      whyItMatters:
+        'Thin 2.5mm wall over a 1.4m unsupported span sinks visibly during cooling; pulls bumper surface inward.',
+      costImpact: 'Reject rate climbs to ~6% on first run without packing tuning.',
+      leadTimeImpact: 'Cycle time +15% during packing optimization; tool sampling extends one week.',
+      recommendation: 'Bump top-span wall to 3.0mm OR add internal ribs on the back face every ~200mm.',
+      scoreImpact: '+10',
+      beforeScore: 42,
+      afterScore: 52,
+      hotspot: { top: '24%', left: '50%', label: 'Sink' },
+      region: { min: [-90, 4, -6], max: [90, 14, 6] },
+    },
+    {
+      id: 'undercut-bumper-1',
+      title: 'Undercut on rear sensor mount',
+      severity: 'medium',
+      location: 'parking-sensor pockets, rear face',
+      whyItMatters:
+        'Sensor-mount bosses on the back face require a side action — adds ~$8K to tooling for one cavity.',
+      costImpact: 'Side action: ~$8,000 tooling + extra mold maintenance every 100K cycles.',
+      leadTimeImpact: 'Side-action build adds 1-2 weeks of tool time and validation.',
+      recommendation: 'Move sensor bosses to a separate snap-on bracket; eliminate the side action entirely.',
+      scoreImpact: '+6',
+      beforeScore: 42,
+      afterScore: 48,
+      hotspot: { top: '68%', left: '78%', label: 'Undercut' },
+      region: { min: [55, -14, -10], max: [95, 0, 10] },
+    },
+    {
+      id: 'draft-bumper-1',
+      title: 'Insufficient draft on wraparound ends',
+      severity: 'medium',
+      location: 'left and right wraparound ends',
+      whyItMatters:
+        'The curved ends pull at 0.8°, below the 1.5° minimum for textured automotive surfaces.',
+      costImpact: 'Cosmetic drag marks on every part; rework or texture polish before paint.',
+      leadTimeImpact: 'Tool polish to compensate adds 3-5 days; long-term wear faster.',
+      recommendation: 'Increase draft to 2° minimum on all vertical wraparound faces.',
+      scoreImpact: '+5',
+      beforeScore: 42,
+      afterScore: 47,
+      hotspot: { top: '52%', left: '92%', label: 'Draft' },
+      region: { min: [85, -16, -8], max: [102, 16, 12] },
+    },
+  ],
+  supplierReadiness: {
+    region: 'Michigan',
+    status: 'Specialty supplier required',
+    notes: 'Detroit Mold & Tool is the only Michigan shop with a press large enough for this projected area at this volume.',
+  },
+  checklist: [
+    { id: 'check-1', label: 'Tool size matched to supplier press tonnage', status: 'action' },
+    { id: 'check-2', label: 'Gate strategy validated via mold flow', status: 'action' },
+    { id: 'check-3', label: 'Sensor mount strategy (integrated vs. bracket)', status: 'attention' },
+    { id: 'check-4', label: 'Paint readiness — surface finish + draft check', status: 'attention' },
+    { id: 'check-5', label: 'PPAP timeline aligned with vehicle program SOP', status: 'good' },
+  ],
+}
+
 export const partsLibrary: Record<PartId, MoldAnalysisResult> = {
   bracket,
   phoneCase,
   droneArm,
+  bumper,
 }
 
 /** Default part loaded into the dashboard on first render. */
