@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { toast } from 'sonner'
-import { moldAnalysisData } from '@/lib/mockMoldAnalysis'
-import type { MoldAnalysisResult } from '@/lib/types'
+import { moldAnalysisData, partsLibrary } from '@/lib/mockMoldAnalysis'
+import { useAppStore } from '@/store/useAppStore'
+import type { MoldAnalysisResult, PartId } from '@/lib/types'
 
 export const LOADING_PHASES = [
   'Parsing STEP geometry',
@@ -28,6 +29,10 @@ interface ResultsState {
   toggleShowFix: () => void
   applyFix: (id: string) => void
   resetFixes: () => void
+  /** Switch which part the dashboard is reporting on. Also syncs the
+   *  viewport's currentPartId and clears any user-uploaded STL so the
+   *  viewport renders the matching procedural geometry. */
+  selectPart: (id: PartId) => void
   /** Demo helper: cycles through loading phases then restores mock data. */
   simulateAnalysis: () => Promise<void>
 }
@@ -69,6 +74,28 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     // immediately stomped by a phase tick.
     simulateToken++
     set({ fixedIssueIds: [], showFix: false })
+  },
+
+  selectPart: (id) => {
+    const next = partsLibrary[id]
+    if (!next) {
+      toast.error(`Unknown part "${id}"`)
+      return
+    }
+    simulateToken++ // cancel any in-flight analysis simulation
+    set({
+      analysis: next,
+      selectedIssueId: next.issues[0]?.id ?? null,
+      fixedIssueIds: [],
+      showFix: false,
+    })
+    // Sync the workspace viewport so its geometry matches the dashboard.
+    const app = useAppStore.getState()
+    app.setCurrentPartId(id)
+    if (app.uploadedSTL) {
+      URL.revokeObjectURL(app.uploadedSTL)
+      app.setUploadedSTL(null)
+    }
   },
 
   simulateAnalysis: async () => {

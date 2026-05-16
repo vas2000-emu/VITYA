@@ -10,6 +10,7 @@ import { IssueDetailPanel } from './IssueDetailPanel'
 import { ScoreImprovement } from './ScoreImprovement'
 import { ReadinessChecklist } from './ReadinessChecklist'
 import { LoadingScreen } from './LoadingScreen'
+import { PartsSidebar } from './PartsSidebar'
 
 export function ResultsDashboard() {
   const {
@@ -104,6 +105,7 @@ export function ResultsDashboard() {
                 <ScoreImprovement />
               </div>
               <div className="lg:col-span-2 space-y-6">
+                <PartsSidebar />
                 <IssueDetailPanel />
                 <ReadinessChecklist />
               </div>

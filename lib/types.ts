@@ -115,8 +115,12 @@ export interface MoldChecklistItem {
   status: MoldChecklistStatus
 }
 
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm'
+
 export interface MoldAnalysisResult {
+  partId: PartId
   partName: string
+  partSummary: string
   overallScore: number
   improvedScore: number
   riskSummary: MoldRiskMetric[]

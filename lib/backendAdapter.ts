@@ -20,11 +20,14 @@ import type {
   MoldChecklistStatus,
   MoldIssue,
   MoldIssueSeverity,
+  PartId,
 } from './types'
 
 // Expected backend response shape (mirrors team spec).
 export interface BackendAnalysisResponse {
+  partId: PartId
   partName: string
+  partSummary?: string
   overallScore: number
   improvedScore: number
   moldabilityScore: number
@@ -101,7 +104,11 @@ export function adaptBackendResponse(
   response: BackendAnalysisResponse,
 ): MoldAnalysisResult {
   return {
+    partId: response.partId,
     partName: response.partName,
+    partSummary:
+      response.partSummary ??
+      'CAD analysis result — geometry summary not provided by backend.',
     overallScore: response.overallScore,
     improvedScore: response.improvedScore,
     riskSummary: [
