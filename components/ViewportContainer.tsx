@@ -23,12 +23,24 @@ const VIEW_PRESETS = {
 type ViewName = keyof typeof VIEW_PRESETS
 
 // Which feature ids correspond to a canonical viewport orientation.
-const PLANE_VIEW: Record<string, ViewName> = {
+// Every entry in this map gives the user a visible reaction when they
+// click that feature button — the camera snaps to the matching view.
+const FEATURE_VIEW: Record<string, ViewName> = {
+  origin: 'home',
   top: 'top',
   front: 'front',
   right: 'right',
-  origin: 'home',
+  // Sketches conceptually live on a plane; orient the viewport to
+  // that plane so the user is "looking at" the sketch.
+  sketch1: 'front',
+  sketch2: 'top',
+  // Solid features look best from an isometric or top angle.
+  baseBody: 'isometric',
+  mountingHole: 'top',
+  edgeRounds: 'isometric',
 }
+
+const PLANE_FEATURE_IDS = new Set(['top', 'front', 'right'])
 
 function findFeature(features: Feature[], id: string | null): Feature | null {
   if (!id) return null
@@ -54,11 +66,12 @@ export function ViewportContainer() {
 
   const selectedFeatureObj = findFeature(features, selectedFeature)
 
-  // Snap the viewport to a preset view when a plane / origin is selected
-  // in the toolbar Features tab or the FeatureTree.
+  // Snap the viewport when any mapped feature is selected — planes,
+  // sketches, and solid features all reorient the camera to a sensible
+  // view so every Features / Sketch tab button has a visible effect.
   useEffect(() => {
     if (!selectedFeature) return
-    const view = PLANE_VIEW[selectedFeature]
+    const view = FEATURE_VIEW[selectedFeature]
     if (view) {
       setRotation(VIEW_PRESETS[view])
       setActiveView(view)
@@ -68,14 +81,12 @@ export function ViewportContainer() {
   const setView = (view: ViewName) => {
     setRotation(VIEW_PRESETS[view])
     setActiveView(view)
-    // Keep store + tree in sync for the named plane views; other presets
-    // just clear any non-plane selection.
-    if (view === 'top' || view === 'front' || view === 'right') {
+    // Keep tree + ribbon in sync for the three named plane views.
+    // Other presets (Home / Isometric) should not wipe a non-plane
+    // feature selection the user made elsewhere.
+    if (PLANE_FEATURE_IDS.has(view)) {
       selectFeature(view)
-    } else if (selectedFeature && !PLANE_VIEW[selectedFeature]) {
-      // Leave non-plane selections alone — Home / Isometric shouldn't
-      // wipe a Sketch / Extrude selection the user made elsewhere.
-    } else {
+    } else if (selectedFeature && PLANE_FEATURE_IDS.has(selectedFeature)) {
       selectFeature(null)
     }
   }
@@ -207,7 +218,7 @@ export function ViewportContainer() {
         <div className="absolute bottom-4 right-4 px-3 py-1.5 bg-zinc-900/90 border border-zinc-800 rounded text-xs">
           {selectedFeatureObj
             ? `Selected: ${selectedFeatureObj.name}`
-            : 'Part 1 • 7 features'}
+            : `Part 1 • ${features.length + features.flatMap((f) => f.children ?? []).length} features`}
         </div>
 
         {activeView && (

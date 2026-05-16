@@ -45,7 +45,7 @@ function flattenFeatures(features: Feature[]): Feature[] {
 }
 
 export function Toolbar() {
-  const [activeTab, setActiveTab] = useState<Tab>('Evaluate')
+  const [activeTab, setActiveTab] = useState<Tab>('Features')
   const {
     features,
     selectedFeature,
