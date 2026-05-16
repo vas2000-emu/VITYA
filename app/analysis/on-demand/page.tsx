@@ -1,14 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Factory, MapPin, Clock, Phone, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Factory, MapPin, Clock, Phone, Loader2, CheckCircle2 } from 'lucide-react'
 import {
   AnalysisPageLayout,
   Section,
   StatBlock,
 } from '@/components/analysis/AnalysisPageLayout'
 import { useAppStore } from '@/store/useAppStore'
-import moldSimApi, { type ManufacturingCheckResponse, type CostResponse } from '@/lib/moldsim-api'
+import {
+  checkManufacturing,
+  calculateCost,
+  type ManufacturingCheckResponse,
+  type CostResponse,
+} from '@/lib/moldsim-api'
+import { QuoteModal } from '@/components/analysis/QuoteModal'
 
 const SHOPS = [
   {
@@ -32,7 +38,7 @@ const SHOPS = [
     location: 'Holland, MI',
     capability: 'Engineering grade resins, glass-filled',
     leadTime: '5-6 weeks',
-    notes: 'Pick this shop if the bracket switches to glass-filled nylon later.',
+    notes: 'Pick this shop if the part switches to glass-filled nylon later.',
     minScore: 65,
   },
   {
@@ -51,37 +57,40 @@ export default function OnDemandManufacturingPage() {
   const [error, setError] = useState<string | null>(null)
   const [dfmData, setDfmData] = useState<ManufacturingCheckResponse | null>(null)
   const [costData, setCostData] = useState<CostResponse | null>(null)
+  const [quoteShop, setQuoteShop] = useState<(typeof SHOPS)[number] | null>(null)
 
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true)
       setError(null)
-      
+
       try {
         const [dfm, cost] = await Promise.all([
-          moldSimApi.checkManufacturability({
-            wall_thickness_mm: simulationParams.wallThickness,
-            min_draft_angle_deg: simulationParams.minDraftAngle,
+          checkManufacturing({
+            wall_thickness: simulationParams.wallThickness,
+            min_draft_angle: simulationParams.minDraftAngle,
             num_undercuts: simulationParams.numUndercuts,
             material: simulationParams.material,
             has_sharp_corners: simulationParams.hasSharpCorners,
             has_uniform_wall: simulationParams.hasUniformWall,
+            part_length: simulationParams.partLength,
+            part_width: simulationParams.partWidth,
           }),
-          moldSimApi.estimateCost({
-            part_volume_cm3: simulationParams.partVolume,
-            part_weight_g: simulationParams.partWeight,
-            projected_area_cm2: simulationParams.projectedArea,
-            wall_thickness_mm: simulationParams.wallThickness,
+          calculateCost({
+            part_volume: simulationParams.partVolume,
+            part_weight: simulationParams.partWeight,
+            projected_area: simulationParams.projectedArea,
+            wall_thickness: simulationParams.wallThickness,
             production_quantity: simulationParams.productionQuantity,
             material: simulationParams.material,
             complexity: simulationParams.complexity,
             num_cavities: simulationParams.numCavities,
             num_undercuts: simulationParams.numUndercuts,
-            melt_temp_c: simulationParams.meltTemp,
-            mold_temp_c: simulationParams.moldTemp,
+            melt_temp: simulationParams.meltTemp,
+            mold_temp: simulationParams.moldTemp,
           }),
         ])
-        
+
         setDfmData(dfm)
         setCostData(cost)
         setSimulationResults({ dfm, cost })
@@ -92,7 +101,7 @@ export default function OnDemandManufacturingPage() {
         setIsLoading(false)
       }
     }
-    
+
     fetchData()
   }, [simulationParams, setSimulationResults])
 
@@ -129,33 +138,26 @@ export default function OnDemandManufacturingPage() {
     )
   }
 
-  const dfmScore = dfmData.dfm_score
-  const getReadinessStatus = () => {
-    if (dfmScore >= 80) return { status: 'Ready for quotes', tone: 'good' as const }
-    if (dfmScore >= 60) return { status: 'Needs improvement', tone: 'warn' as const }
-    return { status: 'Not quote-ready', tone: 'bad' as const }
-  }
-  const readiness = getReadinessStatus()
+  const dfmScore = dfmData.overall_score
+  let readiness: { status: string; tone: 'good' | 'warn' | 'bad' }
+  if (dfmScore >= 80) readiness = { status: 'Ready for quotes', tone: 'good' }
+  else if (dfmScore >= 60) readiness = { status: 'Needs improvement', tone: 'warn' }
+  else readiness = { status: 'Not quote-ready', tone: 'bad' }
 
-  // Filter shops based on DFM score
-  const eligibleShops = SHOPS.filter(shop => dfmScore >= shop.minScore)
-  const bestLeadTime = eligibleShops.length > 0 
-    ? eligibleShops.reduce((best, shop) => {
-        const weeks = parseInt(shop.leadTime.split('-')[0])
-        const bestWeeks = parseInt(best.leadTime.split('-')[0])
-        return weeks < bestWeeks ? shop : best
-      })
-    : null
+  const eligibleShops = SHOPS.filter((shop) => dfmScore >= shop.minScore)
+  const bestLeadTime =
+    eligibleShops.length > 0
+      ? eligibleShops.reduce((best, shop) => {
+          const weeks = parseInt(shop.leadTime.split('-')[0])
+          const bestWeeks = parseInt(best.leadTime.split('-')[0])
+          return weeks < bestWeeks ? shop : best
+        })
+      : null
 
-  // Generate action items based on DFM results
   const actionItems = [
-    ...dfmData.issues.map(issue => ({
-      severity: 'critical' as const,
-      text: issue.message,
-    })),
-    ...dfmData.warnings.map(warning => ({
-      severity: 'warning' as const,
-      text: warning.message,
+    ...dfmData.issues.map((issue) => ({
+      severity: issue.severity === 'critical' ? ('critical' as const) : issue.severity === 'warning' ? ('warning' as const) : ('info' as const),
+      text: issue.issue,
     })),
     {
       severity: 'info' as const,
@@ -174,7 +176,7 @@ export default function OnDemandManufacturingPage() {
         <StatBlock
           label="Readiness"
           value={readiness.status}
-          hint={dfmData.overall_assessment}
+          hint={dfmData.summary}
           tone={readiness.tone}
         />
         <StatBlock
@@ -206,11 +208,13 @@ export default function OnDemandManufacturingPage() {
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="text-xs text-zinc-500 mb-1">Tooling</div>
               <div className="text-lg font-medium text-zinc-100">
-                ${(costData.tooling.total_tooling_cost / 1000).toFixed(1)}k
+                ${(costData.total_tooling_cost / 1000).toFixed(1)}k
               </div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-xs text-zinc-500 mb-1">Per part ({costData.production_quantity.toLocaleString()} pcs)</div>
+              <div className="text-xs text-zinc-500 mb-1">
+                Per part ({simulationParams.productionQuantity.toLocaleString()} pcs)
+              </div>
               <div className="text-lg font-medium text-zinc-100">
                 ${costData.total_cost_per_part.toFixed(2)}
               </div>
@@ -218,13 +222,19 @@ export default function OnDemandManufacturingPage() {
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="text-xs text-zinc-500 mb-1">Total project</div>
               <div className="text-lg font-medium text-zinc-100">
-                ${(costData.total_project_cost / 1000).toFixed(1)}k
+                $
+                {(
+                  (costData.total_cost_per_part * simulationParams.productionQuantity +
+                    costData.total_tooling_cost) /
+                  1000
+                ).toFixed(1)}
+                k
               </div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="text-xs text-zinc-500 mb-1">Parts/hour</div>
               <div className="text-lg font-medium text-zinc-100">
-                {costData.per_part.parts_per_hour.toFixed(0)}
+                {costData.parts_per_hour.toFixed(0)}
               </div>
             </div>
           </div>
@@ -233,7 +243,11 @@ export default function OnDemandManufacturingPage() {
 
       <Section
         title="Candidate shops"
-        description={`${eligibleShops.length > 0 ? 'Shops compatible with your current design' : 'Improve DFM score to unlock shops'}`}
+        description={
+          eligibleShops.length > 0
+            ? 'Click a shop to request a quote for the current design'
+            : 'Improve DFM score to unlock shops'
+        }
       >
         <ul className="divide-y divide-zinc-800 -mx-5 -my-5">
           {SHOPS.map((shop) => {
@@ -243,11 +257,13 @@ export default function OnDemandManufacturingPage() {
                 key={shop.name}
                 className={`px-5 py-4 flex items-start gap-4 ${!isEligible ? 'opacity-50' : ''}`}
               >
-                <span className={`shrink-0 size-9 rounded-md border flex items-center justify-center ${
-                  isEligible 
-                    ? 'border-violet-500/40 bg-violet-500/10 text-violet-300'
-                    : 'border-zinc-700 bg-zinc-800 text-zinc-500'
-                }`}>
+                <span
+                  className={`shrink-0 size-9 rounded-md border flex items-center justify-center ${
+                    isEligible
+                      ? 'border-violet-500/40 bg-violet-500/10 text-violet-300'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-500'
+                  }`}
+                >
                   <Factory className="size-4" />
                 </span>
                 <div className="flex-1 min-w-0">
@@ -257,7 +273,9 @@ export default function OnDemandManufacturingPage() {
                       {isEligible ? (
                         <CheckCircle2 className="size-4 text-emerald-400" />
                       ) : (
-                        <span className="text-xs text-zinc-500">(requires {shop.minScore}+ DFM)</span>
+                        <span className="text-xs text-zinc-500">
+                          (requires {shop.minScore}+ DFM)
+                        </span>
                       )}
                     </h3>
                     <span className="text-xs text-zinc-500 inline-flex items-center gap-1">
@@ -265,17 +283,24 @@ export default function OnDemandManufacturingPage() {
                       {shop.location}
                     </span>
                   </div>
-                  <div className="text-xs text-zinc-400 mt-1">
-                    {shop.capability}
-                  </div>
-                  <div className="text-xs text-zinc-500 mt-2 leading-relaxed">
-                    {shop.notes}
-                  </div>
+                  <div className="text-xs text-zinc-400 mt-1">{shop.capability}</div>
+                  <div className="text-xs text-zinc-500 mt-2 leading-relaxed">{shop.notes}</div>
                 </div>
-                <span className="shrink-0 text-xs text-zinc-300 inline-flex items-center gap-1">
-                  <Clock className="size-3.5 text-zinc-500" />
-                  {shop.leadTime}
-                </span>
+                <div className="shrink-0 flex flex-col items-end gap-2">
+                  <span className="text-xs text-zinc-300 inline-flex items-center gap-1">
+                    <Clock className="size-3.5 text-zinc-500" />
+                    {shop.leadTime}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuoteShop(shop)}
+                    disabled={!isEligible}
+                    className="px-2.5 py-1 text-[11px] bg-violet-600 hover:bg-violet-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={isEligible ? `Request a quote from ${shop.name}` : `Improve DFM score to ${shop.minScore}+ to unlock`}
+                  >
+                    Request Quote
+                  </button>
+                </div>
               </li>
             )
           })}
@@ -288,12 +313,17 @@ export default function OnDemandManufacturingPage() {
           description="Items the shop will flag during their own DFM review"
         >
           <ul className="space-y-2 text-sm text-zinc-200">
-            {actionItems.map((item, i) => (
-              <li key={i} className="flex gap-3">
-                <span className={`size-1.5 rounded-full mt-2 shrink-0 ${
-                  item.severity === 'critical' ? 'bg-rose-400' :
-                  item.severity === 'warning' ? 'bg-amber-400' : 'bg-emerald-400'
-                }`} />
+            {actionItems.map((item) => (
+              <li key={`${item.severity}-${item.text}`} className="flex gap-3">
+                <span
+                  className={`size-1.5 rounded-full mt-2 shrink-0 ${
+                    item.severity === 'critical'
+                      ? 'bg-rose-400'
+                      : item.severity === 'warning'
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                  }`}
+                />
                 {item.text}
               </li>
             ))}
@@ -308,13 +338,30 @@ export default function OnDemandManufacturingPage() {
           </span>
           <div>
             {dfmScore >= 70 ? (
-              <>Your design is ready for quotes. Contact any of the eligible shops above to request tooling quotes.</>
+              <>
+                Your design is ready for quotes. Click <strong>Request Quote</strong> on any
+                eligible shop above to start the handshake.
+              </>
             ) : (
-              <>Apply the recommended design fixes to reach a DFM score of 70+, then request quotes from the candidate shops above.</>
+              <>
+                Apply the recommended design fixes to reach a DFM score of 70+, then request
+                quotes from the candidate shops above.
+              </>
             )}
           </div>
         </div>
       </Section>
+
+      <QuoteModal
+        open={quoteShop !== null}
+        onClose={() => setQuoteShop(null)}
+        shop={quoteShop}
+        estimate={{
+          tooling: costData?.total_tooling_cost ?? 24500,
+          perPart: costData?.total_cost_per_part ?? 1.42,
+          leadWeeks: quoteShop ? parseInt(quoteShop.leadTime.split('-')[0]) : 4,
+        }}
+      />
     </AnalysisPageLayout>
   )
 }
