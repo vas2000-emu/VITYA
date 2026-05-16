@@ -10,14 +10,75 @@ import {
   Grid3x3,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import type { Feature } from '@/lib/types'
+
+const VIEW_PRESETS = {
+  home: { x: -20, y: 30 },
+  isometric: { x: -20, y: 30 },
+  front: { x: 0, y: 0 },
+  top: { x: -90, y: 0 },
+  right: { x: 0, y: -90 },
+} as const
+
+type ViewName = keyof typeof VIEW_PRESETS
+
+// Which feature ids correspond to a canonical viewport orientation.
+const PLANE_VIEW: Record<string, ViewName> = {
+  top: 'top',
+  front: 'front',
+  right: 'right',
+  origin: 'home',
+}
+
+function findFeature(features: Feature[], id: string | null): Feature | null {
+  if (!id) return null
+  for (const f of features) {
+    if (f.id === id) return f
+    if (f.children) {
+      const found = findFeature(f.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
 
 export function ViewportContainer() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [rotation, setRotation] = useState({ x: -20, y: 30 })
+  const [activeView, setActiveView] = useState<ViewName | null>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [lastPos, setLastPos] = useState({ x: 0, y: 0 })
-  const { showManufacturing } = useAppStore()
+  const { showManufacturing, selectedFeature, selectFeature, features } =
+    useAppStore()
+
+  const selectedFeatureObj = findFeature(features, selectedFeature)
+
+  // Snap the viewport to a preset view when a plane / origin is selected
+  // in the toolbar Features tab or the FeatureTree.
+  useEffect(() => {
+    if (!selectedFeature) return
+    const view = PLANE_VIEW[selectedFeature]
+    if (view) {
+      setRotation(VIEW_PRESETS[view])
+      setActiveView(view)
+    }
+  }, [selectedFeature])
+
+  const setView = (view: ViewName) => {
+    setRotation(VIEW_PRESETS[view])
+    setActiveView(view)
+    // Keep store + tree in sync for the named plane views; other presets
+    // just clear any non-plane selection.
+    if (view === 'top' || view === 'front' || view === 'right') {
+      selectFeature(view)
+    } else if (selectedFeature && !PLANE_VIEW[selectedFeature]) {
+      // Leave non-plane selections alone — Home / Isometric shouldn't
+      // wipe a Sketch / Extrude selection the user made elsewhere.
+    } else {
+      selectFeature(null)
+    }
+  }
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -34,12 +95,12 @@ export function ViewportContainer() {
 
     drawGrid(ctx, width, height)
     drawAxes(ctx, width, height)
-    draw3DPart(ctx, width, height, rotation, showManufacturing)
+    draw3DPart(ctx, width, height, rotation, showManufacturing, !!selectedFeature)
 
     if (showManufacturing) {
       drawManufacturingAnalysis(ctx, width, height)
     }
-  }, [rotation, showManufacturing])
+  }, [rotation, showManufacturing, selectedFeature])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -74,6 +135,8 @@ export function ViewportContainer() {
       y: rotation.y + dx * 0.5,
     })
     setLastPos({ x: e.clientX, y: e.clientY })
+    // Manual drag no longer matches any named view preset.
+    if (activeView !== null) setActiveView(null)
   }
 
   const handleMouseUp = () => {
@@ -84,21 +147,27 @@ export function ViewportContainer() {
     <div className="h-full flex flex-col bg-zinc-950">
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900">
         <div className="flex gap-1">
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Home
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Isometric
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Front
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Top
-          </button>
-          <button className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
-            Right
-          </button>
+          {(
+            [
+              ['home', 'Home'],
+              ['isometric', 'Isometric'],
+              ['front', 'Front'],
+              ['top', 'Top'],
+              ['right', 'Right'],
+            ] as const
+          ).map(([view, label]) => (
+            <button
+              key={view}
+              onClick={() => setView(view)}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                activeView === view
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                  : 'bg-zinc-800 hover:bg-zinc-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="flex gap-1">
           <button className="p-1.5 hover:bg-zinc-800 rounded" title="Pan">
@@ -136,8 +205,16 @@ export function ViewportContainer() {
         />
 
         <div className="absolute bottom-4 right-4 px-3 py-1.5 bg-zinc-900/90 border border-zinc-800 rounded text-xs">
-          Part 1 • 7 features
+          {selectedFeatureObj
+            ? `Selected: ${selectedFeatureObj.name}`
+            : 'Part 1 • 7 features'}
         </div>
+
+        {activeView && (
+          <div className="absolute top-4 left-4 px-2.5 py-1 bg-zinc-900/90 border border-zinc-800 rounded text-[10px] uppercase tracking-wider text-zinc-400">
+            {activeView} view
+          </div>
+        )}
       </div>
     </div>
   )
@@ -219,7 +296,8 @@ function draw3DPart(
   width: number,
   height: number,
   rot: { x: number; y: number },
-  showManufacturing: boolean
+  showManufacturing: boolean,
+  highlightSelected: boolean
 ) {
   const centerX = width / 2
   const centerY = height / 2 - 20
@@ -272,10 +350,12 @@ function draw3DPart(
 
   const projected = vertices.map(([x, y, z]) => project(x, y, z))
 
+  const edgeColor = highlightSelected ? '#3b82f6' : '#71717a'
+
   faces.forEach((face, i) => {
     ctx.fillStyle = faceColors[i]
-    ctx.strokeStyle = '#71717a'
-    ctx.lineWidth = 1.5
+    ctx.strokeStyle = edgeColor
+    ctx.lineWidth = highlightSelected ? 2 : 1.5
     ctx.beginPath()
     const [p0, p1, p2, p3] = face.map((idx) => projected[idx])
     ctx.moveTo(p0.x, p0.y)
@@ -289,7 +369,7 @@ function draw3DPart(
 
   const numSegments = 32
   ctx.fillStyle = '#18181b'
-  ctx.strokeStyle = '#71717a'
+  ctx.strokeStyle = edgeColor
   ctx.beginPath()
   for (let i = 0; i <= numSegments; i++) {
     const angle = (i / numSegments) * Math.PI * 2
