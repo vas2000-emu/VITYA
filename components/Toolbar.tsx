@@ -1,60 +1,62 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
   Box,
+  Circle,
+  CircleDot,
   ClipboardCheck,
   DollarSign,
   Factory,
   FileText,
   GitCompare,
   Layers3,
+  Locate,
+  Pencil,
   Search,
   Settings2,
+  Sparkles,
+  Square,
   Triangle,
+  Wrench,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import type { Feature, FeatureType } from '@/lib/types'
 
-// SOLIDWORKS-style tab strip. Only "Evaluate" is functional in this
-// project — the others are visible to keep the layout familiar but
-// don't claim functionality we haven't built.
-const TABS: { name: string; active: boolean }[] = [
-  { name: 'Features', active: false },
-  { name: 'Sketch', active: false },
-  { name: 'Evaluate', active: true },
-  { name: 'Markup', active: false },
-]
+type Tab = 'Features' | 'Sketch' | 'Evaluate' | 'Markup'
+const TABS: Tab[] = ['Features', 'Sketch', 'Evaluate', 'Markup']
 
-// Each ribbon entry maps to a real destination in this app.
-// Analysis links pre-select an issue on the results dashboard via the
-// `focus` query param (read by ResultsDashboard).
-const EVALUATE_GROUPS: {
-  label: string
-  items: { label: string; href: string; icon: LucideIcon }[]
-}[] = [
-  {
-    label: 'Geometry analysis',
-    items: [
-      { label: 'Undercut Analysis', href: '/results?focus=undercut-1', icon: Box },
-      { label: 'Draft Analysis', href: '/results?focus=draft-1', icon: Triangle },
-      { label: 'Thickness Analysis', href: '/results?focus=thin-wall-1', icon: Layers3 },
-    ],
-  },
-  {
-    label: 'Manufacturing',
-    items: [
-      { label: 'Costing', href: '/results', icon: DollarSign },
-      { label: 'On Demand Manufacturing', href: '/results', icon: Factory },
-      { label: 'Part Reviewer', href: '/results', icon: ClipboardCheck },
-    ],
-  },
-]
+const FEATURE_ICONS: Record<FeatureType, LucideIcon> = {
+  origin: Locate,
+  sketch: Pencil,
+  extrude: Box,
+  revolve: Circle,
+  fillet: Wrench,
+  chamfer: Triangle,
+  hole: CircleDot,
+  plane: Square,
+}
+
+function flattenFeatures(features: Feature[]): Feature[] {
+  return features.flatMap((f) => [f, ...(f.children ?? [])])
+}
 
 export function Toolbar() {
-  const { setShowDiff, showManufacturing, setShowManufacturing, setRightPanel } =
-    useAppStore()
+  const [activeTab, setActiveTab] = useState<Tab>('Evaluate')
+  const {
+    features,
+    selectedFeature,
+    selectFeature,
+    aiSuggestions,
+    previewSuggestion,
+    setShowDiff,
+    showManufacturing,
+    setShowManufacturing,
+    setRightPanel,
+  } = useAppStore()
 
   const handleToggleManufacturing = () => {
     const newState = !showManufacturing
@@ -66,66 +68,69 @@ export function Toolbar() {
 
   return (
     <header className="bg-zinc-900 border-b border-zinc-800">
-      {/* Tab strip */}
-      <div className="flex items-center justify-between px-3 pt-1.5">
-        <div className="flex items-end gap-0.5">
-          <span className="flex items-center gap-2 px-2 py-1 mr-3 text-sm font-semibold text-zinc-200">
-            <span className="size-5 rounded bg-blue-500/15 border border-blue-500/40 flex items-center justify-center">
-              <Settings2 className="size-3 text-blue-300" />
+      {/* Tab strip — tabs are interactive and swap the ribbon below. */}
+      <div className="flex items-center justify-between px-3 pt-2">
+        <div className="flex items-end gap-1">
+          <span className="flex items-center gap-2 px-2 py-1.5 mr-3 text-sm font-semibold text-zinc-200">
+            <span className="size-6 rounded bg-blue-500/15 border border-blue-500/40 flex items-center justify-center">
+              <Settings2 className="size-3.5 text-blue-300" />
             </span>
             MoldLocal Design
           </span>
-          {TABS.map((tab) => (
-            <span
-              key={tab.name}
-              className={`px-3 py-1.5 text-xs rounded-t border-x border-t transition-colors ${
-                tab.active
-                  ? 'bg-zinc-950 border-zinc-700 text-zinc-100'
-                  : 'border-transparent text-zinc-500'
-              }`}
-              aria-current={tab.active ? 'page' : undefined}
-            >
-              {tab.name}
-            </span>
-          ))}
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm rounded-t border-x border-t transition-colors ${
+                  isActive
+                    ? 'bg-zinc-950 border-zinc-700 text-zinc-100'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                }`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {tab}
+              </button>
+            )
+          })}
         </div>
 
-        <div className="flex items-center gap-2 pb-1">
-          <div className="hidden md:flex items-center gap-2 px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-500 w-56">
-            <Search className="size-3" />
-            <span>Search analyses</span>
-          </div>
+        <div className="hidden md:flex items-center gap-2 px-2.5 py-1.5 mb-1.5 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-500 w-60">
+          <Search className="size-3.5" />
+          <span>Search analyses</span>
         </div>
       </div>
 
-      {/* Evaluate ribbon */}
-      <div className="flex items-stretch justify-between border-t border-zinc-800 bg-zinc-950/40">
-        <div className="flex items-stretch">
-          {EVALUATE_GROUPS.map((group, gi) => (
-            <div
-              key={group.label}
-              className={`flex flex-col px-2 py-1.5 ${
-                gi < EVALUATE_GROUPS.length - 1 ? 'border-r border-zinc-800' : ''
-              }`}
-            >
-              <div className="flex items-center gap-1">
-                {group.items.map((item) => (
-                  <RibbonLink
-                    key={item.label}
-                    href={item.href}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                ))}
-              </div>
-              <span className="text-[10px] uppercase tracking-wider text-zinc-600 mt-1 px-1">
-                {group.label}
-              </span>
-            </div>
-          ))}
-        </div>
+      {/* Ribbon row — content driven by the active tab. */}
+      <div className="flex items-stretch border-t border-zinc-800 bg-zinc-950/40 min-h-[88px]">
+        {activeTab === 'Features' && (
+          <FeaturesRibbon
+            features={flattenFeatures(features)}
+            selectedFeature={selectedFeature}
+            onSelect={selectFeature}
+          />
+        )}
+        {activeTab === 'Sketch' && (
+          <SketchRibbon
+            sketches={features.filter((f) => f.type === 'sketch')}
+            selectedFeature={selectedFeature}
+            onSelect={selectFeature}
+          />
+        )}
+        {activeTab === 'Evaluate' && <EvaluateRibbon />}
+        {activeTab === 'Markup' && (
+          <MarkupRibbon
+            suggestions={aiSuggestions}
+            onPreview={(id) => {
+              previewSuggestion(id)
+              setRightPanel('ai')
+            }}
+          />
+        )}
 
-        <div className="flex items-center gap-1 px-3 border-l border-zinc-800">
+        {/* Persistent global actions — rendered as the rightmost ribbon group */}
+        <RibbonGroup bordered>
           <RibbonButton
             onClick={() => setShowDiff(true)}
             icon={GitCompare}
@@ -137,20 +142,140 @@ export function Toolbar() {
             label="Manufacturing"
             active={showManufacturing}
           />
-
-          <div className="h-8 w-px bg-zinc-700 mx-1" />
-
-          <Link
-            href="/results"
-            className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded text-sm font-medium text-white"
-            title="View MoldLocal readiness report"
-          >
-            <FileText className="size-4" />
-            <span>Reports</span>
-          </Link>
-        </div>
+          <RibbonLink href="/results" icon={FileText} label="Reports" />
+        </RibbonGroup>
       </div>
     </header>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Ribbon variants
+// ---------------------------------------------------------------------------
+
+function FeaturesRibbon({
+  features,
+  selectedFeature,
+  onSelect,
+}: {
+  features: Feature[]
+  selectedFeature: string | null
+  onSelect: (id: string | null) => void
+}) {
+  return (
+    <RibbonGroup>
+      {features.map((f) => (
+        <RibbonButton
+          key={f.id}
+          icon={FEATURE_ICONS[f.type]}
+          label={f.name}
+          active={selectedFeature === f.id}
+          onClick={() => onSelect(f.id)}
+        />
+      ))}
+    </RibbonGroup>
+  )
+}
+
+function SketchRibbon({
+  sketches,
+  selectedFeature,
+  onSelect,
+}: {
+  sketches: Feature[]
+  selectedFeature: string | null
+  onSelect: (id: string | null) => void
+}) {
+  return (
+    <RibbonGroup>
+      {sketches.length === 0 ? (
+        <span className="text-xs text-zinc-500 px-3 py-3 self-center">
+          No sketches in this part
+        </span>
+      ) : (
+        sketches.map((s) => (
+          <RibbonButton
+            key={s.id}
+            icon={Pencil}
+            label={s.name}
+            active={selectedFeature === s.id}
+            onClick={() => onSelect(s.id)}
+          />
+        ))
+      )}
+    </RibbonGroup>
+  )
+}
+
+function MarkupRibbon({
+  suggestions,
+  onPreview,
+}: {
+  suggestions: { id: string; title: string; status: string }[]
+  onPreview: (id: string) => void
+}) {
+  return (
+    <RibbonGroup>
+      {suggestions.length === 0 ? (
+        <span className="text-xs text-zinc-500 px-3 py-3 self-center">
+          No suggestions yet
+        </span>
+      ) : (
+        suggestions.map((s) => (
+          <RibbonButton
+            key={s.id}
+            icon={Sparkles}
+            label={s.title}
+            active={s.status === 'previewing'}
+            onClick={() => onPreview(s.id)}
+          />
+        ))
+      )}
+    </RibbonGroup>
+  )
+}
+
+function EvaluateRibbon() {
+  return (
+    <>
+      <RibbonGroup bordered>
+        <RibbonLink href="/results?focus=undercut-1" icon={Box} label="Undercut Analysis" />
+        <RibbonLink href="/results?focus=draft-1" icon={Triangle} label="Draft Analysis" />
+        <RibbonLink
+          href="/results?focus=thin-wall-1"
+          icon={Layers3}
+          label="Thickness Analysis"
+        />
+      </RibbonGroup>
+      <RibbonGroup>
+        <RibbonLink href="/results" icon={DollarSign} label="Costing" />
+        <RibbonLink href="/results" icon={Factory} label="On Demand Manufacturing" />
+        <RibbonLink href="/results" icon={ClipboardCheck} label="Part Reviewer" />
+      </RibbonGroup>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Shared primitives — uniform SOLIDWORKS-style ribbon button: icon on top,
+// multi-line label below, thin vertical dividers between groups.
+// ---------------------------------------------------------------------------
+
+function RibbonGroup({
+  children,
+  bordered,
+}: {
+  children: React.ReactNode
+  bordered?: boolean
+}) {
+  return (
+    <div
+      className={`flex items-center gap-0.5 px-2 ${
+        bordered ? 'border-r border-zinc-800' : ''
+      }`}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -166,11 +291,11 @@ function RibbonLink({
   return (
     <Link
       href={href}
-      className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
+      className="flex flex-col items-center justify-start gap-1 w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
       title={label}
     >
-      <Icon className="size-5 text-zinc-300" />
-      <span className="text-[10px] leading-tight text-zinc-400 text-center max-w-[78px]">
+      <Icon className="size-6 text-zinc-300 shrink-0" />
+      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words">
         {label}
       </span>
     </Link>
@@ -191,15 +316,15 @@ function RibbonButton({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded transition-colors ${
+      className={`flex flex-col items-center justify-start gap-1 w-[78px] px-1 py-2 rounded transition-colors ${
         active
-          ? 'bg-orange-600 hover:bg-orange-700 text-white'
+          ? 'bg-blue-600/80 hover:bg-blue-600 text-white'
           : 'hover:bg-zinc-800 text-zinc-300'
       }`}
       title={label}
     >
-      <Icon className="size-5" />
-      <span className="text-[10px] leading-tight text-center max-w-[78px]">
+      <Icon className="size-6 shrink-0" />
+      <span className="text-[11px] leading-tight text-center break-words">
         {label}
       </span>
     </button>
