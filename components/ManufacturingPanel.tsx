@@ -11,6 +11,7 @@ import {
   PanelRightClose,
   PanelRight,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
 import type { ManufacturingIssue, IssueType } from '@/lib/types'
 
@@ -63,7 +64,15 @@ function IssueItem({ issue }: IssueItemProps) {
               <div className="text-zinc-300">{issue.suggestion}</div>
             </div>
           )}
-          <button className="w-full px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded">
+          <button
+            type="button"
+            onClick={() =>
+              toast(`Highlighting ${issue.location ?? issue.title} in 3D View`, {
+                description: '(Demo — viewport highlight not yet wired)',
+              })
+            }
+            className="w-full px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"
+          >
             Highlight in 3D View
           </button>
         </div>
@@ -134,10 +143,22 @@ export function ManufacturingPanel() {
       </div>
 
       <div className="p-4 border-t border-zinc-800 space-y-2">
-        <button className="w-full px-3 py-2 text-sm bg-orange-600 hover:bg-orange-700 rounded">
+        <button
+          type="button"
+          onClick={() =>
+            toast('Generate Mold Design', {
+              description: 'Coming soon — this is on the roadmap.',
+            })
+          }
+          className="w-full px-3 py-2 text-sm bg-orange-600 hover:bg-orange-700 rounded"
+        >
           Generate Mold Design
         </button>
-        <button className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded">
+        <button
+          type="button"
+          onClick={() => window.open('/api/report?partId=bracket', '_blank')}
+          className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded"
+        >
           Export Analysis Report
         </button>
       </div>

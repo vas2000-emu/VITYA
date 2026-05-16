@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/useAppStore'
 
 export function ParameterPanel() {
   const [editingId, setEditingId] = useState<string | null>(null)
-  const { parameters, toggleParameterLock, updateParameterValue } = useAppStore()
+  const { parameters, toggleParameterLock, updateParameterValue, addParameter } = useAppStore()
 
   return (
     <div className="h-full flex flex-col bg-zinc-900 border-t border-zinc-800">
@@ -68,7 +68,11 @@ export function ParameterPanel() {
       </div>
 
       <div className="p-3 border-t border-zinc-800">
-        <button className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded">
+        <button
+          type="button"
+          onClick={addParameter}
+          className="w-full px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded"
+        >
           + Add Parameter
         </button>
       </div>

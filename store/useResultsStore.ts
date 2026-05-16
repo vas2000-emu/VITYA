@@ -1,6 +1,15 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
 import { moldAnalysisData } from '@/lib/mockMoldAnalysis'
 import type { MoldAnalysisResult } from '@/lib/types'
+
+export const LOADING_PHASES = [
+  'Parsing STEP geometry',
+  'Detecting features (holes, bosses, ribs)',
+  'Checking draft angles and undercuts',
+  'Querying Michigan supplier readiness',
+  'Generating recommendations',
+] as const
 
 interface ResultsState {
   analysis: MoldAnalysisResult
@@ -23,15 +32,20 @@ interface ResultsState {
   simulateAnalysis: () => Promise<void>
 }
 
-export const useResultsStore = create<ResultsState>((set) => ({
+// Module-level token used by simulateAnalysis() to short-circuit stale runs
+// when a newer simulate is kicked off (e.g. user clicks Re-analyze twice fast,
+// or switches parts mid-load).
+let simulateToken = 0
+
+export const useResultsStore = create<ResultsState>((set, get) => ({
   analysis: moldAnalysisData,
   selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
   fixedIssueIds: [],
   showFix: false,
 
   loading: false,
-  loadingPhase: '',
-  setLoading: (loading, phase = '') => set({ loading, loadingPhase: phase }),
+  loadingPhase: LOADING_PHASES[0],
+  setLoading: (loading, phase = LOADING_PHASES[0]) => set({ loading, loadingPhase: phase }),
   setAnalysis: (analysis) =>
     set({
       analysis,
@@ -42,29 +56,32 @@ export const useResultsStore = create<ResultsState>((set) => ({
 
   selectIssue: (id) => set({ selectedIssueId: id, showFix: false }),
   toggleShowFix: () => set((s) => ({ showFix: !s.showFix })),
-  applyFix: (id) =>
-    set((s) =>
-      s.fixedIssueIds.includes(id)
-        ? s
-        : { fixedIssueIds: [...s.fixedIssueIds, id], showFix: true },
-    ),
-  resetFixes: () => set({ fixedIssueIds: [], showFix: false }),
+  applyFix: (id) => {
+    const already = get().fixedIssueIds.includes(id)
+    if (already) {
+      toast('Already fixed', { description: 'This issue is already in the applied-fixes list.' })
+      return
+    }
+    set((s) => ({ fixedIssueIds: [...s.fixedIssueIds, id], showFix: true }))
+  },
+  resetFixes: () => {
+    // Bumping the token cancels any in-flight simulate so the reset isn't
+    // immediately stomped by a phase tick.
+    simulateToken++
+    set({ fixedIssueIds: [], showFix: false })
+  },
 
   simulateAnalysis: async () => {
-    const phases = [
-      'Parsing STEP geometry',
-      'Detecting features (holes, bosses, ribs)',
-      'Checking draft angles and undercuts',
-      'Querying Michigan supplier readiness',
-      'Generating recommendations',
-    ]
-    for (const phase of phases) {
+    const myToken = ++simulateToken
+    for (const phase of LOADING_PHASES) {
+      if (myToken !== simulateToken) return // a newer run replaced us
       set({ loading: true, loadingPhase: phase })
       await new Promise((r) => setTimeout(r, 550))
     }
+    if (myToken !== simulateToken) return
     set({
       loading: false,
-      loadingPhase: '',
+      loadingPhase: LOADING_PHASES[0],
       fixedIssueIds: [],
       showFix: false,
       selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
