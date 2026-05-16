@@ -100,50 +100,128 @@ function buildDroneArmGeometry() {
 }
 
 function buildBumperGeometry() {
-  const beam = new THREE.BoxGeometry(180, 30, 16)
-  beam.translate(0, 5, 0)
+  const meshes = []
 
-  const topLip = new THREE.BoxGeometry(160, 8, 6)
-  topLip.translate(0, 22, 10)
+  // Main body — curved cross-section extruded
+  const profile = new THREE.Shape()
+  profile.moveTo(-22, -14)
+  profile.lineTo(18, -14)
+  profile.quadraticCurveTo(22, -14, 22, -10)
+  profile.lineTo(22, 10)
+  profile.quadraticCurveTo(22, 14, 18, 14)
+  profile.lineTo(-15, 14)
+  profile.quadraticCurveTo(-22, 14, -22, 10)
+  profile.lineTo(-22, -14)
+  const body = new THREE.ExtrudeGeometry(profile, {
+    depth: 180,
+    bevelEnabled: true,
+    bevelThickness: 1.2,
+    bevelSize: 1.2,
+    bevelSegments: 3,
+    curveSegments: 12,
+  })
+  body.translate(0, 0, -90)
+  body.rotateY(Math.PI / 2)
+  meshes.push(body)
 
-  const lowerLip = new THREE.BoxGeometry(150, 10, 8)
-  lowerLip.translate(0, -13, 6)
+  // Wraparounds
+  const wrapShape = new THREE.Shape()
+  wrapShape.moveTo(-18, -14)
+  wrapShape.lineTo(14, -14)
+  wrapShape.quadraticCurveTo(18, -14, 18, -10)
+  wrapShape.lineTo(18, 10)
+  wrapShape.quadraticCurveTo(18, 14, 14, 14)
+  wrapShape.lineTo(-18, 14)
+  wrapShape.lineTo(-18, -14)
+  const leftWrap = new THREE.ExtrudeGeometry(wrapShape, {
+    depth: 30,
+    bevelEnabled: true,
+    bevelThickness: 1,
+    bevelSize: 1,
+    bevelSegments: 2,
+    curveSegments: 8,
+  })
+  leftWrap.translate(0, 0, -15)
+  leftWrap.rotateY(Math.PI / 2 + Math.PI / 6)
+  leftWrap.translate(-95, 0, -3)
+  meshes.push(leftWrap)
+  const rightWrap = new THREE.ExtrudeGeometry(wrapShape, {
+    depth: 30,
+    bevelEnabled: true,
+    bevelThickness: 1,
+    bevelSize: 1,
+    bevelSegments: 2,
+    curveSegments: 8,
+  })
+  rightWrap.translate(0, 0, -15)
+  rightWrap.rotateY(Math.PI / 2 - Math.PI / 6)
+  rightWrap.translate(95, 0, -3)
+  meshes.push(rightWrap)
 
-  const leftWrap = new THREE.BoxGeometry(28, 28, 14)
-  leftWrap.rotateY(-Math.PI / 6)
-  leftWrap.translate(-98, 5, -4)
+  // Grille
+  const grilleBack = new THREE.BoxGeometry(58, 18, 2)
+  grilleBack.translate(0, 2, 24)
+  meshes.push(grilleBack)
+  for (let i = 0; i < 5; i++) {
+    const slat = new THREE.BoxGeometry(56, 1.6, 3)
+    slat.translate(0, 9 - i * 4, 25.5)
+    meshes.push(slat)
+  }
 
-  const rightWrap = new THREE.BoxGeometry(28, 28, 14)
-  rightWrap.rotateY(Math.PI / 6)
-  rightWrap.translate(98, 5, -4)
+  // Fog lights
+  for (const x of [-72, 72]) {
+    const rim = new THREE.CylinderGeometry(8, 8, 2, 24)
+    rim.rotateX(Math.PI / 2)
+    rim.translate(x, -6, 24)
+    meshes.push(rim)
+    const inner = new THREE.CylinderGeometry(5, 5, 2.5, 20)
+    inner.rotateX(Math.PI / 2)
+    inner.translate(x, -6, 24.4)
+    meshes.push(inner)
+  }
 
-  const fogLeft = new THREE.BoxGeometry(20, 16, 5)
-  fogLeft.translate(-78, -2, 11)
-  const fogRight = new THREE.BoxGeometry(20, 16, 5)
-  fogRight.translate(78, -2, 11)
+  // Brake-cooling ducts
+  for (const x of [-72, 72]) {
+    const duct = new THREE.BoxGeometry(18, 3, 2)
+    duct.translate(x, -13, 24)
+    meshes.push(duct)
+  }
 
-  const grille = new THREE.BoxGeometry(64, 20, 4)
-  grille.translate(0, 2, 11)
+  // License-plate recess + light bar
+  const plateRecess = new THREE.BoxGeometry(40, 12, 1.5)
+  plateRecess.translate(0, -9, 24.5)
+  meshes.push(plateRecess)
+  const plateLight = new THREE.BoxGeometry(28, 1.5, 1.5)
+  plateLight.translate(0, -2.5, 24.5)
+  meshes.push(plateLight)
 
-  const sensorR = new THREE.CylinderGeometry(7, 7, 8, 16)
-  sensorR.rotateX(Math.PI / 2)
-  sensorR.translate(78, -2, -11)
-  const sensorL = new THREE.CylinderGeometry(7, 7, 8, 16)
-  sensorL.rotateX(Math.PI / 2)
-  sensorL.translate(-78, -2, -11)
+  // Tow-hook cover
+  const towCover = new THREE.BoxGeometry(8, 8, 1.5)
+  towCover.translate(-22, 2, 24.6)
+  meshes.push(towCover)
 
-  return mergeGeometries([
-    beam,
-    topLip,
-    lowerLip,
-    leftWrap,
-    rightWrap,
-    fogLeft,
-    fogRight,
-    grille,
-    sensorL,
-    sensorR,
-  ])
+  // Upper splitter
+  const splitter = new THREE.BoxGeometry(150, 2, 4)
+  splitter.translate(0, 13, 23.5)
+  meshes.push(splitter)
+
+  // Lower air dam + chin splitter
+  const airDam = new THREE.BoxGeometry(140, 6, 10)
+  airDam.translate(0, -18, 18)
+  meshes.push(airDam)
+  const chinSplitter = new THREE.BoxGeometry(120, 2, 14)
+  chinSplitter.translate(0, -21, 22)
+  meshes.push(chinSplitter)
+
+  // Parking sensors on rear face
+  for (const x of [-60, -20, 20, 60]) {
+    const puck = new THREE.CylinderGeometry(4, 4, 6, 14)
+    puck.rotateX(Math.PI / 2)
+    puck.translate(x, -2, -22)
+    meshes.push(puck)
+  }
+
+  return mergeGeometries(meshes)
 }
 
 function mergeGeometries(geoms) {
