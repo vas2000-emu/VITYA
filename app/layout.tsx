@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'AI-Assisted CAD Interface',
-  description: 'A modern CAD interface with AI-powered design suggestions and manufacturing analysis',
+  title: 'VITYA - AI-Assisted Injection Molding Design',
+  description: 'A modern CAD interface with AI-powered design suggestions and manufacturing analysis for Michigan injection molding',
   generator: 'v0.app',
   icons: {
     icon: [
