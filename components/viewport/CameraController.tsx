@@ -21,13 +21,20 @@ const VIEW_TARGETS: Record<ViewportPreset, [number, number, number]> = {
 
 const TWEEN_MS = 400
 
-// Map feature-tree IDs to camera presets so clicking a datum plane in
-// the FeatureTree snaps the camera to that view.
+// Map feature-tree IDs to camera presets so clicking a feature snaps
+// the camera to a useful view.
 const FEATURE_VIEW: Record<string, ViewportPreset> = {
   top: 'top',
   front: 'front',
   right: 'right',
   origin: 'isometric',
+  baseBody: 'isometric',
+  mountingHole: 'front',
+  sketch1: 'top',
+  sketch2: 'top',
+  extrude1: 'isometric',
+  extrude2: 'isometric',
+  fillet1: 'isometric',
 }
 
 export function CameraController() {
