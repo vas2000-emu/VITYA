@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import type {
-  Feature,
   AISuggestion,
   Parameter,
   ManufacturingIssue,
@@ -42,25 +41,6 @@ export interface SimulationResults {
   isLoading: boolean
   error: string | null
 }
-
-// Mock data — feature names kept in plain English so non-CAD users can
-// read the toolbar without translating CAD jargon ("Extrude 1" -> "Base
-// Body", "Hole 1" -> "Mounting Hole", etc).
-const initialFeatures: Feature[] = [
-  {
-    id: 'origin',
-    name: 'Origin',
-    type: 'origin',
-    children: [
-      { id: 'top', name: 'Top Plane', type: 'plane' },
-      { id: 'front', name: 'Front Plane', type: 'plane' },
-      { id: 'right', name: 'Right Plane', type: 'plane' },
-    ],
-  },
-  { id: 'baseBody', name: 'Base Body', type: 'extrude' },
-  { id: 'mountingHole', name: 'Mounting Hole', type: 'hole' },
-  { id: 'edgeRounds', name: 'Edge Rounds', type: 'fillet' },
-]
 
 const initialSuggestions: AISuggestion[] = [
   {
@@ -104,13 +84,16 @@ const initialSuggestions: AISuggestion[] = [
   },
 ]
 
+// Parameter IDs must match the keys in ParameterPanel's paramToSimulationKey
+// table so editing values syncs through to simulationParams. The geometry
+// rebuild in components/viewport/Part.tsx also keys off these IDs.
 const initialParameters: Parameter[] = [
-  { id: 'p1', name: 'Base Width', value: 120, unit: 'mm', locked: true, constraint: 'width' },
-  { id: 'p2', name: 'Base Length', value: 120, unit: 'mm', locked: false },
-  { id: 'p3', name: 'Height', value: 40, unit: 'mm', locked: false },
-  { id: 'p4', name: 'Hole Diameter', value: 30, unit: 'mm', locked: false, constraint: 'diameter' },
-  { id: 'p5', name: 'Wall Thickness', value: 2.5, unit: 'mm', locked: false },
-  { id: 'p6', name: 'Fillet Radius', value: 2, unit: 'mm', locked: false },
+  { id: 'p-len', name: 'Part Length', value: 120, unit: 'mm', locked: false },
+  { id: 'p-wid', name: 'Part Width', value: 120, unit: 'mm', locked: false },
+  { id: 'p-height', name: 'Height', value: 40, unit: 'mm', locked: false },
+  { id: 'p-draft', name: 'Draft Angle', value: 2, unit: '°', locked: false },
+  { id: 'p-wall', name: 'Wall Thickness', value: 2.5, unit: 'mm', locked: false },
+  { id: 'p-fillet', name: 'Fillet Radius', value: 2, unit: 'mm', locked: false },
 ]
 
 const initialIssues: ManufacturingIssue[] = [
@@ -164,13 +147,6 @@ interface AppState {
   setAuthenticated: (auth: boolean) => void
   logout: () => void
 
-  // Feature state
-  features: Feature[]
-  selectedFeature: string | null
-  selectFeature: (id: string | null) => void
-  addFeature: (feature?: Partial<Feature>) => void
-  removeFeature: (id: string) => void
-
   // AI suggestions state
   aiSuggestions: AISuggestion[]
   acceptSuggestion: (id: string) => void
@@ -191,8 +167,6 @@ interface AppState {
   setPreviewMode: (mode: boolean) => void
 
   // UI state
-  showDiff: boolean
-  setShowDiff: (show: boolean) => void
   showManufacturing: boolean
   setShowManufacturing: (show: boolean) => void
   rightPanel: RightPanelType
@@ -217,17 +191,26 @@ interface AppState {
   viewportGrid: boolean
   viewportHeatmap: boolean
   viewportZoomNudge: number // bump this to push camera closer (+) / farther (-)
+  viewportMoldMode: MoldMode
   setViewportView: (view: ViewportPreset | null) => void
   setViewportTool: (tool: ViewportTool) => void
   toggleViewportGrid: () => void
   toggleViewportHeatmap: () => void
   nudgeZoom: (delta: number) => void
+  setViewportMoldMode: (mode: MoldMode) => void
 
   // STL upload / current part
   uploadedSTL: string | null
   setUploadedSTL: (url: string | null) => void
   currentPartId: string
   setCurrentPartId: (id: string) => void
+
+  // Current part's world-space AABB — published by Part.tsx so Mold.tsx
+  // can size the cavity/core blocks around it without a parent prop.
+  // Stored as flattened tuple [minX, minY, minZ, maxX, maxY, maxZ] so
+  // we can do shallow-equality checks in zustand.
+  partBounds: [number, number, number, number, number, number] | null
+  setPartBounds: (b: [number, number, number, number, number, number] | null) => void
 
   // Simulation state (moldsim backend)
   simulationParams: SimulationParams
@@ -239,12 +222,15 @@ interface AppState {
 
 export type ViewportPreset = 'home' | 'isometric' | 'front' | 'top' | 'right'
 export type ViewportTool = 'rotate' | 'pan'
+/** Mold visualization mode controlled from ViewportToolbar:
+ *   - 'part'  = part only (default; original behavior)
+ *   - 'mold'  = mold blocks visible, part hidden
+ *   - 'both'  = part + transparent mold blocks overlaid
+ */
+export type MoldMode = 'part' | 'mold' | 'both'
 
 let chatIdCounter = 0
 const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
-
-let featureIdCounter = 0
-const nextFeatureId = () => `feat-${Date.now()}-${featureIdCounter++}`
 
 let parameterIdCounter = 0
 const nextParameterId = () => `param-${Date.now()}-${parameterIdCounter++}`
@@ -254,27 +240,6 @@ export const useAppStore = create<AppState>((set) => ({
   isAuthenticated: false,
   setAuthenticated: (auth) => set({ isAuthenticated: auth }),
   logout: () => set({ isAuthenticated: false }),
-
-  // Feature state
-  features: initialFeatures,
-  selectedFeature: null,
-  selectFeature: (id) => set({ selectedFeature: id }),
-  addFeature: (feature) =>
-    set((state) => {
-      const id = feature?.id ?? nextFeatureId()
-      const newFeature: Feature = {
-        id,
-        name: feature?.name ?? `New Feature ${state.features.length + 1}`,
-        type: feature?.type ?? 'sketch',
-        ...feature,
-      }
-      return { features: [...state.features, newFeature] }
-    }),
-  removeFeature: (id) =>
-    set((state) => ({
-      features: state.features.filter((f) => f.id !== id),
-      selectedFeature: state.selectedFeature === id ? null : state.selectedFeature,
-    })),
 
   // AI suggestions state
   aiSuggestions: initialSuggestions,
@@ -338,8 +303,6 @@ export const useAppStore = create<AppState>((set) => ({
   setPreviewMode: (mode) => set({ previewMode: mode }),
 
   // UI state
-  showDiff: false,
-  setShowDiff: (show) => set({ showDiff: show }),
   showManufacturing: false,
   setShowManufacturing: (show) => set({ showManufacturing: show }),
   rightPanel: 'ai',
@@ -368,11 +331,13 @@ export const useAppStore = create<AppState>((set) => ({
   viewportGrid: true,
   viewportHeatmap: true,
   viewportZoomNudge: 0,
+  viewportMoldMode: 'part',
   setViewportView: (view) => set({ viewportActiveView: view }),
   setViewportTool: (tool) => set({ viewportTool: tool }),
   toggleViewportGrid: () => set((s) => ({ viewportGrid: !s.viewportGrid })),
   toggleViewportHeatmap: () => set((s) => ({ viewportHeatmap: !s.viewportHeatmap })),
   nudgeZoom: (delta) => set((s) => ({ viewportZoomNudge: s.viewportZoomNudge + delta })),
+  setViewportMoldMode: (mode) => set({ viewportMoldMode: mode }),
 
   // STL upload / current part library. Bumper is the hero demo part —
   // see lib/mockMoldAnalysis.ts moldAnalysisData for the matching
@@ -381,6 +346,8 @@ export const useAppStore = create<AppState>((set) => ({
   setUploadedSTL: (url) => set({ uploadedSTL: url }),
   currentPartId: 'bumper',
   setCurrentPartId: (id) => set({ currentPartId: id }),
+  partBounds: null,
+  setPartBounds: (b) => set({ partBounds: b }),
 
   // Simulation state (moldsim backend). Defaults match the bumper hero
   // demo case — keep these in sync with lib/partSimInputs.ts.bumper so

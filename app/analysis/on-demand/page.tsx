@@ -20,6 +20,7 @@ const SHOPS = [
   {
     name: 'Great Lakes Plastics',
     location: 'Grand Rapids, MI',
+    zip: '49503',
     capability: 'Single-cavity prototype + bridge tooling',
     leadTime: '4-5 weeks',
     notes: 'Strong on small-to-medium snap-fit parts. Comfortable with side actions.',
@@ -28,6 +29,7 @@ const SHOPS = [
   {
     name: 'Detroit Mold & Tool',
     location: 'Sterling Heights, MI',
+    zip: '48312',
     capability: 'Production tooling, multi-cavity',
     leadTime: '8-10 weeks',
     notes: 'Best fit once volumes pass 25k pieces and the geometry is fixed.',
@@ -36,6 +38,7 @@ const SHOPS = [
   {
     name: 'Lakeshore IM',
     location: 'Holland, MI',
+    zip: '49423',
     capability: 'Engineering grade resins, glass-filled',
     leadTime: '5-6 weeks',
     notes: 'Pick this shop if the part switches to glass-filled nylon later.',
@@ -44,12 +47,27 @@ const SHOPS = [
   {
     name: 'Midwest Precision Molding',
     location: 'Kalamazoo, MI',
+    zip: '49001',
     capability: 'Low-volume production, rapid prototyping',
     leadTime: '3-4 weeks',
     notes: 'Great for fast turnaround on simpler geometries. Limited side-action capability.',
     minScore: 75,
   },
 ]
+
+// Distance proxy: first 3 digits of a ZIP cluster geographically in the
+// US. Without a real geocoder we rank by the absolute integer
+// difference of the prefix — close enough for "show me nearby molders"
+// in a Michigan-only marketplace.
+function rankByZipProximity<T extends { zip: string }>(shops: T[], userZip: string): T[] {
+  const target = parseInt(userZip.slice(0, 3), 10)
+  if (Number.isNaN(target)) return shops
+  return [...shops].sort((a, b) => {
+    const da = Math.abs(parseInt(a.zip.slice(0, 3), 10) - target)
+    const db = Math.abs(parseInt(b.zip.slice(0, 3), 10) - target)
+    return da - db
+  })
+}
 
 export default function OnDemandManufacturingPage() {
   const { simulationParams, setSimulationResults } = useAppStore()
@@ -58,6 +76,7 @@ export default function OnDemandManufacturingPage() {
   const [dfmData, setDfmData] = useState<ManufacturingCheckResponse | null>(null)
   const [costData, setCostData] = useState<CostResponse | null>(null)
   const [quoteShop, setQuoteShop] = useState<(typeof SHOPS)[number] | null>(null)
+  const [userZip, setUserZip] = useState('')
 
   useEffect(() => {
     async function fetchData() {
@@ -144,7 +163,8 @@ export default function OnDemandManufacturingPage() {
   else if (dfmScore >= 60) readiness = { status: 'Needs improvement', tone: 'warn' }
   else readiness = { status: 'Not quote-ready', tone: 'bad' }
 
-  const eligibleShops = SHOPS.filter((shop) => dfmScore >= shop.minScore)
+  const rankedShops = /^\d{5}$/.test(userZip) ? rankByZipProximity(SHOPS, userZip) : SHOPS
+  const eligibleShops = rankedShops.filter((shop) => dfmScore >= shop.minScore)
   const bestLeadTime =
     eligibleShops.length > 0
       ? eligibleShops.reduce((best, shop) => {
@@ -249,8 +269,25 @@ export default function OnDemandManufacturingPage() {
             : 'Improve DFM score to unlock shops'
         }
       >
+        <div className="flex items-center gap-2 mb-4 -mx-1">
+          <MapPin className="size-4 text-zinc-500" />
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={5}
+            placeholder="Your ZIP (e.g. 49503)"
+            value={userZip}
+            onChange={(e) => setUserZip(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+            className="px-2 py-1 text-xs bg-zinc-900 border border-zinc-700 rounded font-mono w-32 outline-none focus:border-violet-500"
+          />
+          <span className="text-[11px] text-zinc-500">
+            {/^\d{5}$/.test(userZip)
+              ? 'Sorted by distance from your ZIP.'
+              : 'Add a ZIP to sort by distance.'}
+          </span>
+        </div>
         <ul className="divide-y divide-zinc-800 -mx-5 -my-5">
-          {SHOPS.map((shop) => {
+          {rankedShops.map((shop) => {
             const isEligible = dfmScore >= shop.minScore
             return (
               <li

@@ -9,8 +9,11 @@ import {
   RotateCw,
   Maximize2,
   Palette,
+  Box,
+  Layers,
+  Container,
 } from 'lucide-react'
-import { useAppStore, type ViewportPreset } from '@/store/useAppStore'
+import { useAppStore, type MoldMode, type ViewportPreset } from '@/store/useAppStore'
 
 /**
  * Header overlay above the r3f canvas. Reads/writes viewport state via
@@ -23,14 +26,17 @@ export function ViewportToolbar({ partName }: { partName: string }) {
     viewportTool,
     viewportGrid,
     viewportHeatmap,
+    viewportMoldMode,
     setViewportView,
     setViewportTool,
     toggleViewportGrid,
     toggleViewportHeatmap,
     nudgeZoom,
+    setViewportMoldMode,
   } = useAppStore()
 
   const setView = (v: ViewportPreset) => setViewportView(v)
+  const setMold = (m: MoldMode) => setViewportMoldMode(m)
 
   return (
     <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-2 bg-zinc-900/85 backdrop-blur border-b border-zinc-800">
@@ -76,6 +82,25 @@ export function ViewportToolbar({ partName }: { partName: string }) {
           icon={<Palette className="size-4" />}
           active={viewportHeatmap}
           onClick={toggleViewportHeatmap}
+        />
+        <span className="h-5 w-px bg-zinc-700 mx-1" />
+        <IconBtn
+          title="Show part only"
+          icon={<Box className="size-4" />}
+          active={viewportMoldMode === 'part'}
+          onClick={() => setMold('part')}
+        />
+        <IconBtn
+          title="Show part + transparent mold"
+          icon={<Layers className="size-4" />}
+          active={viewportMoldMode === 'both'}
+          onClick={() => setMold('both')}
+        />
+        <IconBtn
+          title="Show mold only (hide part)"
+          icon={<Container className="size-4" />}
+          active={viewportMoldMode === 'mold'}
+          onClick={() => setMold('mold')}
         />
       </div>
     </div>

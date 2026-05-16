@@ -5,7 +5,6 @@ import { AIAssistantPanel } from '@/components/AIAssistantPanel'
 import { ParameterPanel } from '@/components/ParameterPanel'
 import { ManufacturingPanel } from '@/components/ManufacturingPanel'
 import { Toolbar } from '@/components/Toolbar'
-import { GeometryDiff } from '@/components/GeometryDiff'
 import { LandingPage } from '@/components/LandingPage'
 import { useAppStore } from '@/store/useAppStore'
 
@@ -82,9 +81,6 @@ export default function CADPage() {
           </div>
         </aside>
       </div>
-
-      {/* Geometry Diff Modal */}
-      <GeometryDiff />
     </div>
   )
 }

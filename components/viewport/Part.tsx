@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useResultsStore } from '@/store/useResultsStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import { getPartGeometry, type PartId } from './partGeometry'
+import { useDebouncedGeometryParams } from './useDebouncedGeometryParams'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
 
 const SEVERITY_HEX: Record<MoldIssueSeverity, string> = {
@@ -32,12 +33,21 @@ export function Part() {
   const currentPartId = useAppStore((s) => s.currentPartId) as PartId
   const heatmapEnabled = useAppStore((s) => s.viewportHeatmap)
   const showManufacturing = useAppStore((s) => s.showManufacturing)
+  const moldMode = useAppStore((s) => s.viewportMoldMode)
+  const setPartBounds = useAppStore((s) => s.setPartBounds)
 
   const fixedIssueIds = useResultsStore((s) => s.fixedIssueIds)
   const pendingFixId = useResultsStore((s) => s.pendingFixId)
   const selectIssue = useResultsStore((s) => s.selectIssue)
 
-  const proceduralGeom = useMemo(() => getPartGeometry(currentPartId), [currentPartId])
+  // Live geometry params come from the design Parameters panel via the
+  // store, debounced ~200ms so dragging a slider doesn't trash the
+  // useMemo / vertex-color recompute on every keystroke.
+  const geomParams = useDebouncedGeometryParams(200)
+  const proceduralGeom = useMemo(
+    () => getPartGeometry(currentPartId, geomParams),
+    [currentPartId, geomParams]
+  )
   const [uploadedGeom, setUploadedGeom] = useState<THREE.BufferGeometry | null>(null)
   const meshRef = useRef<THREE.Mesh>(null)
 
@@ -96,6 +106,7 @@ export function Part() {
     if (!pos) return
     geometry.computeBoundingBox()
     const box = geometry.boundingBox!
+    setPartBounds([box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z])
     const ySpan = Math.max(0.001, box.max.y - box.min.y)
 
     const colors = new Float32Array(pos.count * 3)
@@ -161,7 +172,7 @@ export function Part() {
 
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
     vertexIssueIndex.current = issueIdx
-  }, [geometry, issues, heatmapEnabled, fixedIssueIds])
+  }, [geometry, issues, heatmapEnabled, fixedIssueIds, setPartBounds])
 
   // Pulse the pending issue's vertices between severity color and green.
   useFrame(({ clock }) => {
@@ -223,30 +234,36 @@ export function Part() {
     selectIssue(hover.issue.id)
   }
 
+  // Mold mode 'mold' hides the part entirely so the mold blocks read.
+  // 'both' shows both: part is still solid, mold blocks are translucent.
+  const partVisible = moldMode !== 'mold'
+
   return (
     <>
-      <mesh
-        ref={meshRef}
-        geometry={geometry}
-        castShadow
-        receiveShadow
-        onPointerMove={handlePointerMove}
-        onPointerOut={handlePointerOut}
-        onClick={handleClick}
-      >
-        <meshPhysicalMaterial
-          vertexColors
-          color={showManufacturing ? '#fca5a5' : '#ffffff'}
-          roughness={0.42}
-          metalness={0.18}
-          clearcoat={0.5}
-          clearcoatRoughness={0.35}
-          sheen={0.2}
-          sheenColor="#ffffff"
-          envMapIntensity={0.9}
-        />
-      </mesh>
-      {hover && <IssueTooltip issue={hover.issue} point={hover.point} />}
+      {partVisible && (
+        <mesh
+          ref={meshRef}
+          geometry={geometry}
+          castShadow
+          receiveShadow
+          onPointerMove={handlePointerMove}
+          onPointerOut={handlePointerOut}
+          onClick={handleClick}
+        >
+          <meshPhysicalMaterial
+            vertexColors
+            color={showManufacturing ? '#fca5a5' : '#ffffff'}
+            roughness={0.42}
+            metalness={0.18}
+            clearcoat={0.5}
+            clearcoatRoughness={0.35}
+            sheen={0.2}
+            sheenColor="#ffffff"
+            envMapIntensity={0.9}
+          />
+        </mesh>
+      )}
+      {hover && partVisible && <IssueTooltip issue={hover.issue} point={hover.point} />}
     </>
   )
 }

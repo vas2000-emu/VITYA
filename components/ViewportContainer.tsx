@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { Scene } from './viewport/Scene'
 import { STLDropzone } from './viewport/STLDropzone'
 import { ViewportToolbar } from './viewport/ViewportToolbar'
+import { SimulationStatusHud } from './viewport/SimulationStatusHud'
 
 const PART_NAMES: Record<string, string> = {
   bracket: 'Plastic Bracket — bracket.stl',
@@ -34,6 +35,7 @@ export function ViewportContainer() {
           <Scene />
         </Suspense>
       </STLDropzone>
+      <SimulationStatusHud />
     </div>
   )
 }
