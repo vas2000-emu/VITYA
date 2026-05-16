@@ -14,6 +14,7 @@ import {
   GitCompare,
   Layers3,
   Locate,
+  LogOut,
   Pencil,
   Search,
   Settings2,
@@ -56,6 +57,7 @@ export function Toolbar() {
     showManufacturing,
     setShowManufacturing,
     setRightPanel,
+    logout,
   } = useAppStore()
 
   const handleToggleManufacturing = () => {
@@ -143,6 +145,11 @@ export function Toolbar() {
             active={showManufacturing}
           />
           <RibbonLink href="/results" icon={FileText} label="Reports" />
+          <RibbonButton
+            onClick={logout}
+            icon={LogOut}
+            label="Sign out"
+          />
         </RibbonGroup>
       </div>
     </header>
