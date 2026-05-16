@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Grid, Environment, ContactShadows } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
@@ -16,6 +16,7 @@ import { WebGLContextLossOverlay } from './WebGLContextLossOverlay'
 export function Scene() {
   const showGrid = useAppStore((s) => s.viewportGrid)
   const [lost, setLost] = useState(false)
+  const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   return (
     <>
@@ -23,14 +24,23 @@ export function Scene() {
       shadows
       dpr={[1, 2]}
       camera={{ position: [220, 160, 220], fov: 45, near: 1, far: 2000 }}
-      gl={{ antialias: true }}
+      gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
         const canvas = gl.domElement
         canvas.addEventListener('webglcontextlost', (e) => {
           e.preventDefault()
-          setLost(true)
+          // Debounce: HMR + brief context churn often restores within ~1s.
+          // Only escalate to the overlay if no restore arrives in 2s.
+          if (lostTimer.current) clearTimeout(lostTimer.current)
+          lostTimer.current = setTimeout(() => setLost(true), 2000)
         })
-        canvas.addEventListener('webglcontextrestored', () => setLost(false))
+        canvas.addEventListener('webglcontextrestored', () => {
+          if (lostTimer.current) {
+            clearTimeout(lostTimer.current)
+            lostTimer.current = null
+          }
+          setLost(false)
+        })
       }}
     >
       <color attach="background" args={['#09090b']} />

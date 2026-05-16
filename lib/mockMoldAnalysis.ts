@@ -57,6 +57,7 @@ const bracket: MoldAnalysisResult = {
       beforeScore: 56,
       afterScore: 82,
       hotspot: { top: '47%', left: '74%', label: 'Undercut' },
+      region: { min: [-52, 18, -16], max: [-36, 30, 16] }, // snap-fit hook box
     },
     {
       id: 'draft-1',
@@ -72,6 +73,7 @@ const bracket: MoldAnalysisResult = {
       beforeScore: 56,
       afterScore: 74,
       hotspot: { top: '40%', left: '40%', label: 'Draft' },
+      region: { min: [-62, -14, -46], max: [-46, 34, 46] }, // vertical wall
     },
     {
       id: 'thin-wall-1',
@@ -87,6 +89,7 @@ const bracket: MoldAnalysisResult = {
       beforeScore: 56,
       afterScore: 70,
       hotspot: { top: '68%', left: '22%', label: 'Thin wall' },
+      region: { min: [-21, -10, -8], max: [-9, 14, 8] }, // rib region
     },
   ],
   supplierReadiness: {
