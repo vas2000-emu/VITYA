@@ -16,6 +16,10 @@ interface ResultsState {
   analysis: MoldAnalysisResult
   selectedIssueId: string | null
   fixedIssueIds: string[]
+  /** While a fix is "applying" (CSS+3D transition window), this is the
+   *  issue id; null when no fix is mid-application. UI uses this to show
+   *  spinners and to animate the mesh region's color. */
+  pendingFixId: string | null
   showFix: boolean
 
   // Loading state — flip these when the real backend fetch is wired in.
@@ -46,6 +50,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   analysis: moldAnalysisData,
   selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
   fixedIssueIds: [],
+  pendingFixId: null,
   showFix: false,
 
   loading: false,
@@ -62,18 +67,41 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   selectIssue: (id) => set({ selectedIssueId: id, showFix: false }),
   toggleShowFix: () => set((s) => ({ showFix: !s.showFix })),
   applyFix: (id) => {
-    const already = get().fixedIssueIds.includes(id)
-    if (already) {
+    const state = get()
+    if (state.fixedIssueIds.includes(id)) {
       toast('Already fixed', { description: 'This issue is already in the applied-fixes list.' })
       return
     }
-    set((s) => ({ fixedIssueIds: [...s.fixedIssueIds, id], showFix: true }))
+    if (state.pendingFixId) {
+      toast('A fix is already applying', { description: 'Wait for the current animation to finish.' })
+      return
+    }
+    // Two-phase apply so the viewport / score / diff have a transition
+    // window to animate before the commit lands.
+    set({ pendingFixId: id, showFix: true })
+    const PENDING_MS = 1500
+    setTimeout(() => {
+      // Guard: user may have hit Reset or switched parts mid-apply.
+      const after = get()
+      if (after.pendingFixId !== id) return
+      set((s) => ({
+        fixedIssueIds: s.fixedIssueIds.includes(id) ? s.fixedIssueIds : [...s.fixedIssueIds, id],
+        pendingFixId: null,
+        showFix: true,
+      }))
+      const issue = after.analysis.issues.find((i) => i.id === id)
+      if (issue) {
+        toast.success(`Fix applied: ${issue.title}`, {
+          description: `Score ${issue.scoreImpact}`,
+        })
+      }
+    }, PENDING_MS)
   },
   resetFixes: () => {
     // Bumping the token cancels any in-flight simulate so the reset isn't
     // immediately stomped by a phase tick.
     simulateToken++
-    set({ fixedIssueIds: [], showFix: false })
+    set({ fixedIssueIds: [], pendingFixId: null, showFix: false })
   },
 
   selectPart: (id) => {
@@ -87,6 +115,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
       analysis: next,
       selectedIssueId: next.issues[0]?.id ?? null,
       fixedIssueIds: [],
+      pendingFixId: null,
       showFix: false,
     })
     // Sync the workspace viewport so its geometry matches the dashboard.
@@ -110,6 +139,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
       loading: false,
       loadingPhase: LOADING_PHASES[0],
       fixedIssueIds: [],
+      pendingFixId: null,
       showFix: false,
       selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
     })
