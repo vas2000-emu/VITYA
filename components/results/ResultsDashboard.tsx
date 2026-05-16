@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, Cpu, RotateCcw, RefreshCw } from 'lucide-react'
+import { ChevronLeft, Cpu, RotateCcw, RefreshCw, Download } from 'lucide-react'
 import { useResultsStore } from '@/store/useResultsStore'
 import { ScoreOverview } from './ScoreOverview'
 import { PartPreview } from './PartPreview'
@@ -67,6 +67,7 @@ export function ResultsDashboard() {
           <div className="h-6 w-px bg-zinc-700" />
 
           <button
+            type="button"
             onClick={resetFixes}
             disabled={fixedIssueIds.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
@@ -74,6 +75,20 @@ export function ResultsDashboard() {
           >
             <RotateCcw className="size-4" />
             <span className="text-sm">Reset</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const fixed = fixedIssueIds.join(',')
+              const url = `/api/report?partId=${analysis.partId}${fixed ? `&fixed=${encodeURIComponent(fixed)}` : ''}`
+              window.open(url, '_blank', 'noopener')
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
+            title="Download PDF report for the current part"
+          >
+            <Download className="size-4" />
+            <span className="text-sm">PDF</span>
           </button>
 
           <button

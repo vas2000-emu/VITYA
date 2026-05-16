@@ -17,15 +17,18 @@ export function Scene() {
   const showGrid = useAppStore((s) => s.viewportGrid)
   const [lost, setLost] = useState(false)
   const [remountKey, setRemountKey] = useState(0)
-  const lostTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recoveryTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const restoreExt = useRef<WEBGL_lose_context | null>(null)
 
+  const clearRecoveryTimers = () => {
+    for (const t of recoveryTimers.current) clearTimeout(t)
+    recoveryTimers.current = []
+  }
+
   const forceRestart = () => {
-    // Try the soft path first (still has GL context): force-lose + restore
-    // via the standard extension; r3f re-initializes inside the existing
-    // canvas. If that fails, fall through to a hard React remount which
-    // tears down the Canvas component entirely and creates a fresh GL
-    // context from scratch.
+    // Soft path: WEBGL_lose_context.restoreContext usually rebuilds in
+    // place. Fall back to a hard React remount (Canvas key bump) which
+    // tears down the GL context entirely.
     try {
       restoreExt.current?.loseContext()
       setTimeout(() => restoreExt.current?.restoreContext(), 50)
@@ -47,22 +50,25 @@ export function Scene() {
         restoreExt.current = gl.getContext().getExtension('WEBGL_lose_context')
         canvas.addEventListener('webglcontextlost', (e) => {
           e.preventDefault()
-          // Try to recover immediately via the extension. Most consumer
-          // GPUs grant it. If recovery succeeds, the restored event fires
-          // and we never escalate to the overlay.
-          try {
-            restoreExt.current?.restoreContext()
-          } catch {
-            /* fall through to debounced overlay */
-          }
-          if (lostTimer.current) clearTimeout(lostTimer.current)
-          lostTimer.current = setTimeout(() => setLost(true), 2500)
+          // Try to recover several times with staggered retries before
+          // escalating. Browsers vary on when they grant restoreContext()
+          // (some immediately, some only after the page settles), so
+          // hammer it at 0 / 250 / 1000 / 3000 ms. If 3s in we're still
+          // not restored, hard-remount the Canvas — that almost always
+          // wins. Only if that also fails (rare) do we show the overlay
+          // at 8s.
+          clearRecoveryTimers()
+          recoveryTimers.current.push(
+            setTimeout(() => restoreExt.current?.restoreContext(), 0),
+            setTimeout(() => restoreExt.current?.restoreContext(), 250),
+            setTimeout(() => restoreExt.current?.restoreContext(), 1000),
+            setTimeout(() => restoreExt.current?.restoreContext(), 3000),
+            setTimeout(() => setRemountKey((k) => k + 1), 5000),
+            setTimeout(() => setLost(true), 8000),
+          )
         })
         canvas.addEventListener('webglcontextrestored', () => {
-          if (lostTimer.current) {
-            clearTimeout(lostTimer.current)
-            lostTimer.current = null
-          }
+          clearRecoveryTimers()
           setLost(false)
         })
       }}
