@@ -109,70 +109,158 @@ function buildDroneArmGeometry(): THREE.BufferGeometry {
   return mergeGeometries([center, arm, mount, motor])
 }
 
-/** Automotive front bumper fascia. Long horizontal beam, two
- *  wraparound ends, lower lip, two fog-light bezel pockets, and a pair
- *  of sensor-mount bosses on the BACK face that drive the "undercut"
- *  issue in the mock data. All sub-features overlap the beam by ≥1
- *  unit on shared axes — no coincident faces to z-fight. */
+/**
+ * Realistic automotive front bumper fascia — the DEMO HERO part.
+ *
+ * Visual feature inventory (each ties to a marked-up issue):
+ *   • Curved-cross-section main beam (ExtrudeGeometry along extruded
+ *     length — convex top, vertical front, soft bottom curve)
+ *   • Two wraparound ends angled back toward the wheel wells
+ *   • Central grille opening (recessed) with horizontal slats
+ *   • Two fog-light bezels (recessed pockets, rim ring)
+ *   • Upper splitter / hood-line lip
+ *   • Lower air dam with chin splitter
+ *   • License plate recess (upper center) + small light bar above it
+ *   • Tow-hook cover (small flap on left of grille)
+ *   • Four parking-sensor pucks on the rear face (undercuts)
+ *   • Brake-cooling ducts under the fog lights
+ */
 function buildBumperGeometry(): THREE.BufferGeometry {
-  // Main horizontal beam. z spans -8..8.
-  const beam = new THREE.BoxGeometry(180, 30, 16)
-  beam.translate(0, 5, 0)
+  const meshes: THREE.BufferGeometry[] = []
 
-  // Top lip that catches air. Sits flush ON TOP of the beam (y overlap)
-  // and PROTRUDES forward of the beam's +z face — its back face is at
-  // z=7, 1 unit INSIDE the beam, so no coincident-face fight.
-  const topLip = new THREE.BoxGeometry(160, 8, 6)
-  topLip.translate(0, 22, 10) // y = 18..26 (overlap beam top), z = 7..13
+  // ── MAIN BODY: curved cross-section extruded along length ──────────
+  // Cross-section drawn in XY of a Shape; we extrude along Z then
+  // rotate so the extrusion direction becomes the world X axis.
+  const profile = new THREE.Shape()
+  // Walking the cross-section clockwise starting at back-bottom:
+  profile.moveTo(-22, -14)          // back-bottom
+  profile.lineTo(18, -14)           // bottom-front
+  profile.quadraticCurveTo(22, -14, 22, -10) // round bottom-front corner
+  profile.lineTo(22, 10)            // up the front face
+  profile.quadraticCurveTo(22, 14, 18, 14)   // round top-front corner
+  profile.lineTo(-15, 14)           // across the top
+  profile.quadraticCurveTo(-22, 14, -22, 10) // round top-back corner
+  profile.lineTo(-22, -14)          // back to start
 
-  // Lower air-dam spoiler — hangs below beam, slight forward bias.
-  const lowerLip = new THREE.BoxGeometry(150, 10, 8)
-  lowerLip.translate(0, -13, 6) // y = -18..-8 (overlap beam bottom), z = 2..10
+  const body = new THREE.ExtrudeGeometry(profile, {
+    depth: 180,
+    bevelEnabled: true,
+    bevelThickness: 1.2,
+    bevelSize: 1.2,
+    bevelSegments: 3,
+    curveSegments: 12,
+  })
+  // Center along extrusion + rotate so length is along world X
+  body.translate(0, 0, -90)
+  body.rotateY(Math.PI / 2)
+  // Now body extends roughly x = -90..90, y = -16..16, z = -23..23
+  meshes.push(body)
 
-  // Left wraparound end — angled box rotated to taper back toward the
-  // body. Positioned just past the beam's left edge, with 2-unit
-  // overlap on x so the joint reads as solid.
-  const leftWrap = new THREE.BoxGeometry(28, 28, 14)
-  leftWrap.rotateY(-Math.PI / 6)
-  leftWrap.translate(-98, 5, -4)
+  // ── WRAPAROUND ENDS — angled boxes meeting the body's outer faces ──
+  const wrapShape = new THREE.Shape()
+  wrapShape.moveTo(-18, -14)
+  wrapShape.lineTo(14, -14)
+  wrapShape.quadraticCurveTo(18, -14, 18, -10)
+  wrapShape.lineTo(18, 10)
+  wrapShape.quadraticCurveTo(18, 14, 14, 14)
+  wrapShape.lineTo(-18, 14)
+  wrapShape.lineTo(-18, -14)
 
-  const rightWrap = new THREE.BoxGeometry(28, 28, 14)
-  rightWrap.rotateY(Math.PI / 6)
-  rightWrap.translate(98, 5, -4)
+  const leftWrap = new THREE.ExtrudeGeometry(wrapShape, {
+    depth: 30,
+    bevelEnabled: true,
+    bevelThickness: 1,
+    bevelSize: 1,
+    bevelSegments: 2,
+    curveSegments: 8,
+  })
+  leftWrap.translate(0, 0, -15)
+  leftWrap.rotateY(Math.PI / 2 + Math.PI / 6) // ~30° wrap angle
+  leftWrap.translate(-95, 0, -3)
+  meshes.push(leftWrap)
 
-  // Fog-light bezels — protrude from the front face. Back face at z=9
-  // is 1 unit forward of beam's +z face (z=8), so no coincidence.
-  const fogLeft = new THREE.BoxGeometry(20, 16, 5)
-  fogLeft.translate(-78, -2, 11) // z = 8.5..13.5 (back face 0.5 unit forward of beam)
-  const fogRight = new THREE.BoxGeometry(20, 16, 5)
-  fogRight.translate(78, -2, 11)
+  const rightWrap = new THREE.ExtrudeGeometry(wrapShape, {
+    depth: 30,
+    bevelEnabled: true,
+    bevelThickness: 1,
+    bevelSize: 1,
+    bevelSegments: 2,
+    curveSegments: 8,
+  })
+  rightWrap.translate(0, 0, -15)
+  rightWrap.rotateY(Math.PI / 2 - Math.PI / 6)
+  rightWrap.translate(95, 0, -3)
+  meshes.push(rightWrap)
 
-  // Central grille — protrudes slightly. Back face at z=9 forward of
-  // beam's +z=8 face.
-  const grille = new THREE.BoxGeometry(64, 20, 4)
-  grille.translate(0, 2, 11) // z = 9..13
+  // ── GRILLE OPENING — central recessed dark panel + horizontal slats ─
+  // Backing plate (dark recess effect). Sits just FORWARD of the body
+  // front face (z=23) so it reads as protruding-then-recessed.
+  const grilleBack = new THREE.BoxGeometry(58, 18, 2)
+  grilleBack.translate(0, 2, 24)
+  meshes.push(grilleBack)
+  // Five horizontal slats spanning the grille
+  for (let i = 0; i < 5; i++) {
+    const slat = new THREE.BoxGeometry(56, 1.6, 3)
+    slat.translate(0, 9 - i * 4, 25.5)
+    meshes.push(slat)
+  }
 
-  // Sensor-mount bosses on the BACK face (z<0). 1-unit overlap into the
-  // beam's -z face for a clean joint.
-  const sensorR = new THREE.CylinderGeometry(7, 7, 8, 16)
-  sensorR.rotateX(Math.PI / 2)
-  sensorR.translate(78, -2, -11) // z = -15..-7 (1-unit overlap into beam back face z=-8)
-  const sensorL = new THREE.CylinderGeometry(7, 7, 8, 16)
-  sensorL.rotateX(Math.PI / 2)
-  sensorL.translate(-78, -2, -11)
+  // ── FOG-LIGHT BEZELS — cylindrical pockets in lower bumper corners ─
+  // Each fog light: outer ring (rim) + inner darker disc.
+  for (const x of [-72, 72]) {
+    const rim = new THREE.CylinderGeometry(8, 8, 2, 24)
+    rim.rotateX(Math.PI / 2)
+    rim.translate(x, -6, 24)
+    meshes.push(rim)
+    const inner = new THREE.CylinderGeometry(5, 5, 2.5, 20)
+    inner.rotateX(Math.PI / 2)
+    inner.translate(x, -6, 24.4)
+    meshes.push(inner)
+  }
 
-  return mergeGeometries([
-    beam,
-    topLip,
-    lowerLip,
-    leftWrap,
-    rightWrap,
-    fogLeft,
-    fogRight,
-    grille,
-    sensorL,
-    sensorR,
-  ])
+  // ── BRAKE-COOLING DUCTS — slim horizontal slots below fog lights ───
+  for (const x of [-72, 72]) {
+    const duct = new THREE.BoxGeometry(18, 3, 2)
+    duct.translate(x, -13, 24)
+    meshes.push(duct)
+  }
+
+  // ── LICENSE-PLATE RECESS + light bar above ─────────────────────────
+  const plateRecess = new THREE.BoxGeometry(40, 12, 1.5)
+  plateRecess.translate(0, -9, 24.5)
+  meshes.push(plateRecess)
+  const plateLight = new THREE.BoxGeometry(28, 1.5, 1.5)
+  plateLight.translate(0, -2.5, 24.5)
+  meshes.push(plateLight)
+
+  // ── TOW-HOOK COVER — small offset flap near grille left ────────────
+  const towCover = new THREE.BoxGeometry(8, 8, 1.5)
+  towCover.translate(-22, 2, 24.6)
+  meshes.push(towCover)
+
+  // ── UPPER SPLITTER / HOOD-LINE LIP — thin chrome-like strip ────────
+  const splitter = new THREE.BoxGeometry(150, 2, 4)
+  splitter.translate(0, 13, 23.5)
+  meshes.push(splitter)
+
+  // ── LOWER AIR DAM + CHIN SPLITTER ──────────────────────────────────
+  const airDam = new THREE.BoxGeometry(140, 6, 10)
+  airDam.translate(0, -18, 18)
+  meshes.push(airDam)
+  const chinSplitter = new THREE.BoxGeometry(120, 2, 14)
+  chinSplitter.translate(0, -21, 22)
+  meshes.push(chinSplitter)
+
+  // ── PARKING SENSORS — four pucks on the rear face (UNDERCUTS) ──────
+  const sensorPositions = [-60, -20, 20, 60]
+  for (const x of sensorPositions) {
+    const puck = new THREE.CylinderGeometry(4, 4, 6, 14)
+    puck.rotateX(Math.PI / 2)
+    puck.translate(x, -2, -22) // back face at z=-23, puck overlaps 1 unit
+    meshes.push(puck)
+  }
+
+  return mergeGeometries(meshes)
 }
 
 const BUILDERS: Record<PartId, () => THREE.BufferGeometry> = {

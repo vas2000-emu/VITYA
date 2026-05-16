@@ -18,8 +18,8 @@ const SEVERITY_HEX: Record<MoldIssueSeverity, string> = {
 }
 
 const FIXED_HEX = '#10b981' // emerald-500
-const BASE_HI = new THREE.Color('#7dd3fc') // sky-300 top
-const BASE_LO = new THREE.Color('#1e3a8a') // navy bottom
+const BASE_HI = new THREE.Color('#d4d4d8') // zinc-300 top
+const BASE_LO = new THREE.Color('#3f3f46') // zinc-700 bottom
 
 /**
  * Renders either the user-uploaded STL (Blob URL from
@@ -268,12 +268,14 @@ function IssueTooltip({
   return (
     <Html
       position={point}
-      center
-      distanceFactor={180}
-      style={{ pointerEvents: 'none' }}
+      style={{
+        pointerEvents: 'none',
+        transform: 'translate(12px, 12px)',
+      }}
+      zIndexRange={[100, 0]}
     >
       <div
-        className={`min-w-[180px] max-w-[240px] rounded-md border bg-zinc-950/90 backdrop-blur px-3 py-2 text-[11px] shadow-lg ${severityClass}`}
+        className={`w-[200px] rounded-md border bg-zinc-950/90 backdrop-blur px-3 py-2 text-[11px] shadow-lg ${severityClass}`}
       >
         <div className="flex items-center justify-between gap-2 mb-1">
           <span className="font-medium text-zinc-100 truncate">{issue.title}</span>

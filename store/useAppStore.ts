@@ -374,30 +374,34 @@ export const useAppStore = create<AppState>((set) => ({
   toggleViewportHeatmap: () => set((s) => ({ viewportHeatmap: !s.viewportHeatmap })),
   nudgeZoom: (delta) => set((s) => ({ viewportZoomNudge: s.viewportZoomNudge + delta })),
 
-  // STL upload / current part library
+  // STL upload / current part library. Bumper is the hero demo part —
+  // see lib/mockMoldAnalysis.ts moldAnalysisData for the matching
+  // dashboard analysis default.
   uploadedSTL: null,
   setUploadedSTL: (url) => set({ uploadedSTL: url }),
-  currentPartId: 'bracket',
+  currentPartId: 'bumper',
   setCurrentPartId: (id) => set({ currentPartId: id }),
 
-  // Simulation state (moldsim backend)
+  // Simulation state (moldsim backend). Defaults match the bumper hero
+  // demo case — keep these in sync with lib/partSimInputs.ts.bumper so
+  // the analysis pages light up with bumper data on first load.
   simulationParams: {
-    material: 'ABS',
-    wallThickness: 2.5,
-    partVolume: 50,
-    partWeight: 52,
-    projectedArea: 144,
-    partLength: 120,
-    partWidth: 120,
-    meltTemp: 240,
-    moldTemp: 60,
-    productionQuantity: 10000,
-    complexity: 'moderate',
+    material: 'PP',
+    wallThickness: 3,
+    partVolume: 1200,
+    partWeight: 1100,
+    projectedArea: 6500,
+    partLength: 1700,
+    partWidth: 450,
+    meltTemp: 230,
+    moldTemp: 50,
+    productionQuantity: 50_000,
+    complexity: 'very_complex',
     numCavities: 1,
-    numUndercuts: 1,
-    minDraftAngle: 1.5,
+    numUndercuts: 3,
+    minDraftAngle: 2,
     hasSharpCorners: false,
-    hasUniformWall: true,
+    hasUniformWall: false,
   },
   simulationResults: {
     cost: null,
