@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { Grid, Environment, ContactShadows, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { CameraController } from './CameraController'
 import { Part } from './Part'
+import { Mold } from './Mold'
 import { ViewportLoader } from './ViewportLoader'
 
 // How long the loader stays up after mount. Just a cosmetic cover for
@@ -20,7 +22,17 @@ const LOADER_MS = 1500
  */
 export function Scene() {
   const showGrid = useAppStore((s) => s.viewportGrid)
+  const partBounds = useAppStore((s) => s.partBounds)
+  const moldMode = useAppStore((s) => s.viewportMoldMode)
   const [showLoader, setShowLoader] = useState(true)
+
+  const partBox = useMemo(() => {
+    if (!partBounds) return null
+    return new THREE.Box3(
+      new THREE.Vector3(partBounds[0], partBounds[1], partBounds[2]),
+      new THREE.Vector3(partBounds[3], partBounds[4], partBounds[5])
+    )
+  }, [partBounds])
 
   useEffect(() => {
     const t = setTimeout(() => setShowLoader(false), LOADER_MS)
@@ -46,6 +58,7 @@ export function Scene() {
         <directionalLight position={[-120, 80, -160]} intensity={0.35} />
 
         <Part />
+        {moldMode !== 'part' && <Mold partBox={partBox} />}
 
         {showGrid && (
           <Grid

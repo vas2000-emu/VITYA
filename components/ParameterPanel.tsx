@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Settings, Lock, Unlock, Beaker } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 
-// Maps design parameters to simulation parameters
-const paramToSimulationKey: Record<string, string> = {
+// Maps design parameters to simulation parameters. IDs here MUST match
+// those in store/useAppStore.ts initialParameters or edits silently
+// no-op. Any param not in this map still updates locally; only mapped
+// ones propagate to the moldsim API call shape.
+const paramToSimulationKey: Record<string, keyof import('@/store/useAppStore').SimulationParams> = {
   'p-wall': 'wallThickness',
   'p-draft': 'minDraftAngle',
-  'p-vol': 'partVolume',
   'p-len': 'partLength',
   'p-wid': 'partWidth',
 }

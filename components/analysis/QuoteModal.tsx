@@ -47,11 +47,33 @@ export function QuoteModal({
 
   if (!open || !shop) return null
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setPhase('confirmed')
-    toast.success('Quote request saved', {
-      description: `${shop.name} will reply within 24h. (Demo — no email actually sent.)`,
-    })
+    try {
+      const res = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          shopName: shop.name,
+          shopZip: extractZip(shop.location),
+          partName: 'Current workspace part',
+          material: 'unspecified',
+          productionQuantity: 0,
+          estimateTooling: estimate.tooling,
+          estimatePerPart: estimate.perPart,
+          estimateLeadWeeks: estimate.leadWeeks,
+          notes: '',
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      toast.success('Quote request sent', {
+        description: `${shop.name} will reply within 24h. Tracked in Molder Portal.`,
+      })
+    } catch (err) {
+      toast.error('Failed to send quote request', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      })
+    }
     setTimeout(() => onClose(), 1200)
   }
 
@@ -162,6 +184,13 @@ export function QuoteModal({
       </button>
     </button>
   )
+}
+
+// Shop location strings like "Grand Rapids, MI" don't carry a zip, but
+// some seed data does. Future work: pass shopZip through Shop directly.
+function extractZip(location: string): string | undefined {
+  const m = location.match(/\b(\d{5})\b/)
+  return m ? m[1] : undefined
 }
 
 function QuoteCell({

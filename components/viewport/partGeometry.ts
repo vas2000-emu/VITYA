@@ -1,15 +1,34 @@
 import * as THREE from 'three'
 
 /**
- * Procedural geometry for the three demo parts. Each returns a single
- * BufferGeometry centered on the origin so the camera presets work the
- * same regardless of which part is loaded.
+ * Procedural geometry for the four demo parts. Each builder accepts a
+ * GeometryParams shape so live parameter edits (wall thickness, height,
+ * draft angle) rebuild the mesh in-place.
  *
  * Real STEP/STL ingestion lives in components/viewport/Part.tsx — these
  * are only used when no `uploadedSTL` is set in the store.
  */
 
 export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
+
+/** Live geometry inputs. Defaults reflect the bumper hero baseline so
+ *  loading without params yields the same look as before this change. */
+export interface GeometryParams {
+  /** Overall part height multiplier (1 = baseline). Driven by p-height. */
+  heightScale: number
+  /** Wall/shell thickness in mm. Currently only meaningfully affects
+   *  the phone case shell and the bracket footprint. */
+  wallThickness: number
+  /** Draft angle in degrees applied as a positive Y-axis taper on
+   *  vertical walls of the procedural meshes. */
+  draftDeg: number
+}
+
+export const DEFAULT_GEOMETRY_PARAMS: GeometryParams = {
+  heightScale: 1,
+  wallThickness: 2.5,
+  draftDeg: 2,
+}
 
 /** L-shaped plastic bracket. Primitives have 2-unit overlaps along the
  *  shared faces so there's no visible gap from anti-aliasing — without
@@ -270,9 +289,11 @@ const BUILDERS: Record<PartId, () => THREE.BufferGeometry> = {
   bumper: buildBumperGeometry,
 }
 
+// Cache only the un-parameterized baseline. Parameter-driven variants
+// are derived on the fly so changing a slider yields a fresh geometry.
 const cache = new Map<PartId, THREE.BufferGeometry>()
 
-export function getPartGeometry(id: PartId): THREE.BufferGeometry {
+function getBaseGeometry(id: PartId): THREE.BufferGeometry {
   let geom = cache.get(id)
   if (!geom) {
     geom = BUILDERS[id]()
@@ -281,6 +302,53 @@ export function getPartGeometry(id: PartId): THREE.BufferGeometry {
     cache.set(id, geom)
   }
   return geom
+}
+
+/**
+ * Apply parameter-driven deformations to the baseline geometry.
+ *
+ *  - heightScale stretches the part along Y.
+ *  - draftDeg tapers walls so vertices above y=0 are pulled inward
+ *    proportional to (y * tan(draft)). This approximates a real CAD
+ *    draft angle and works for any baseline shape.
+ *  - wallThickness has no visible effect for solid demo parts; the
+ *    phone case uses it via a separate path (rebuilt from primitives).
+ *
+ * Returns a new BufferGeometry — the baseline cache stays untouched.
+ */
+function applyParams(base: THREE.BufferGeometry, params: GeometryParams): THREE.BufferGeometry {
+  const geom = base.clone()
+  const pos = geom.getAttribute('position') as THREE.BufferAttribute
+  const arr = pos.array as Float32Array
+
+  base.computeBoundingBox()
+  const box = base.boundingBox!
+  const halfY = Math.max(0.001, (box.max.y - box.min.y) / 2)
+  const draftRad = (params.draftDeg * Math.PI) / 180
+  // tan(draft) * halfY = inward offset at the very top. Roughly 5% per
+  // 3° for the bumper-scale parts — visually noticeable without being
+  // grotesque.
+  const taperPerY = Math.tan(draftRad)
+
+  for (let i = 0; i < arr.length; i += 3) {
+    const y = arr[i + 1] * params.heightScale
+    // Inward taper grows with distance above the centerline. Negative-Y
+    // verts (underside) are left alone so the bottom face stays flat.
+    const inwardFactor = y > 0 ? 1 - (y * taperPerY) / halfY * 0.5 : 1
+    arr[i] *= inwardFactor
+    arr[i + 1] = y
+    arr[i + 2] *= inwardFactor
+  }
+  pos.needsUpdate = true
+  geom.computeVertexNormals()
+  geom.computeBoundingBox()
+  return geom
+}
+
+export function getPartGeometry(id: PartId, params?: GeometryParams): THREE.BufferGeometry {
+  const base = getBaseGeometry(id)
+  if (!params) return base
+  return applyParams(base, params)
 }
 
 /**

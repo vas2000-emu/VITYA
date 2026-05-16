@@ -6,11 +6,6 @@ import { OrbitControls as DreiOrbit } from '@react-three/drei'
 import * as THREE from 'three'
 import { useAppStore, type ViewportPreset } from '@/store/useAppStore'
 
-/**
- * Hard-coded camera positions matching the original Canvas-2D view presets
- * (Home/Isometric/Front/Top/Right). When `viewportActiveView` changes in
- * the store, we tween the camera to the new position over ~400ms.
- */
 const VIEW_TARGETS: Record<ViewportPreset, [number, number, number]> = {
   home: [220, 160, 220],
   isometric: [220, 160, 220],
@@ -21,22 +16,11 @@ const VIEW_TARGETS: Record<ViewportPreset, [number, number, number]> = {
 
 const TWEEN_MS = 400
 
-// Map feature-tree IDs to camera presets so clicking a datum plane in
-// the FeatureTree snaps the camera to that view.
-const FEATURE_VIEW: Record<string, ViewportPreset> = {
-  top: 'top',
-  front: 'front',
-  right: 'right',
-  origin: 'isometric',
-}
-
 export function CameraController() {
   const camera = useThree((s) => s.camera)
   const activeView = useAppStore((s) => s.viewportActiveView)
   const tool = useAppStore((s) => s.viewportTool)
   const zoomNudge = useAppStore((s) => s.viewportZoomNudge)
-  const selectedFeature = useAppStore((s) => s.selectedFeature)
-  const setViewportView = useAppStore((s) => s.setViewportView)
 
   const tween = useRef<{
     from: THREE.Vector3
@@ -53,16 +37,6 @@ export function CameraController() {
       start: performance.now(),
     }
   }, [activeView, camera])
-
-  // Datum-plane / origin clicks in the feature tree should drive the
-  // camera to the corresponding view preset. Other feature types
-  // (sketches, bodies, fillets) don't have an associated camera angle —
-  // ignore them.
-  useEffect(() => {
-    if (!selectedFeature) return
-    const preset = FEATURE_VIEW[selectedFeature]
-    if (preset) setViewportView(preset)
-  }, [selectedFeature, setViewportView])
 
   // Toolbar zoom-in/out buttons bump `viewportZoomNudge`. We translate the
   // camera along its view direction. Sign of delta is encoded in the nudge
