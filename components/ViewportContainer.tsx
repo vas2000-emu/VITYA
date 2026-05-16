@@ -372,19 +372,18 @@ function draw3DPart(
   pan: { x: number; y: number } = { x: 0, y: 0 },
 ) {
   const centerX = width / 2 + pan.x
-  const centerY = height / 2 - 20 + pan.y
+  const centerY = height / 2 + 20 + pan.y
 
   const rad = (deg: number) => (deg * Math.PI) / 180
   const rotX = rad(rot.x)
   const rotY = rad(rot.y)
+  const baseScale = 1.8 * zoom
 
-  const project = (x: number, y: number, z: number) => {
+  function project(x: number, y: number, z: number) {
     let tempY = y * Math.cos(rotX) - z * Math.sin(rotX)
     let tempZ = y * Math.sin(rotX) + z * Math.cos(rotX)
     let tempX = x * Math.cos(rotY) - tempZ * Math.sin(rotY)
     tempZ = x * Math.sin(rotY) + tempZ * Math.cos(rotY)
-
-    const baseScale = 2.5 * zoom
     return {
       x: centerX + tempX * baseScale,
       y: centerY - tempY * baseScale,
@@ -392,68 +391,114 @@ function draw3DPart(
     }
   }
 
-  const baseSize = 60
-  const height3d = 40
-  const holeRadius = 15
+  // Plastic bracket assembled from four boxes. Coordinates: X width,
+  // Y depth (back is -Y), Z height (up is +Z). Bottom of the part sits
+  // at Z=0 so the bracket appears to rest on the grid plane.
+  //   - basePlate: wide flat slab with two mounting holes
+  //   - wall:      vertical wall along the back edge of the plate
+  //   - hook:      horizontal arm extending forward from the wall top
+  //   - catch:     small lip hanging down at the front of the hook —
+  //                this is the undercut that /results flags as issue
+  //                "undercut-1"
+  const boxes = [
+    { cx: 0, cy: 0, cz: 6, sx: 120, sy: 80, sz: 12, kind: 'base' },
+    { cx: 0, cy: -36, cz: 44, sx: 120, sy: 8, sz: 64, kind: 'wall' },
+    { cx: 36, cy: -12, cz: 72, sx: 48, sy: 40, sz: 8, kind: 'hook' },
+    { cx: 36, cy: 4, cz: 62, sx: 48, sy: 8, sz: 12, kind: 'catch' },
+  ] as const
 
-  const vertices = [
-    [-baseSize, -baseSize, 0],
-    [baseSize, -baseSize, 0],
-    [baseSize, baseSize, 0],
-    [-baseSize, baseSize, 0],
-    [-baseSize, -baseSize, height3d],
-    [baseSize, -baseSize, height3d],
-    [baseSize, baseSize, height3d],
-    [-baseSize, baseSize, height3d],
-  ]
+  type Pt = { x: number; y: number; z: number }
+  interface FaceDraw {
+    pts: Pt[]
+    color: string
+    avgZ: number
+  }
+  const faces: FaceDraw[] = []
 
-  const faces = [
-    [0, 1, 5, 4],
-    [1, 2, 6, 5],
-    [2, 3, 7, 6],
-    [3, 0, 4, 7],
-    [4, 5, 6, 7],
-    [0, 1, 2, 3],
-  ]
+  const palette = showManufacturing
+    ? { top: '#34d399', side: '#10b981', bottom: '#047857', catchTop: '#f87171', catchSide: '#dc2626' }
+    : { top: '#52525b', side: '#3f3f46', bottom: '#27272a', catchTop: '#52525b', catchSide: '#3f3f46' }
 
-  const faceColors = showManufacturing
-    ? ['#10b981', '#10b981', '#10b981', '#10b981', '#eab308', '#3b82f6']
-    : ['#3f3f46', '#3f3f46', '#3f3f46', '#3f3f46', '#52525b', '#27272a']
+  for (const b of boxes) {
+    const hx = b.sx / 2,
+      hy = b.sy / 2,
+      hz = b.sz / 2
+    const v: Pt[] = [
+      project(b.cx - hx, b.cy - hy, b.cz - hz), // 0 bottom-back-left
+      project(b.cx + hx, b.cy - hy, b.cz - hz), // 1 bottom-back-right
+      project(b.cx + hx, b.cy + hy, b.cz - hz), // 2 bottom-front-right
+      project(b.cx - hx, b.cy + hy, b.cz - hz), // 3 bottom-front-left
+      project(b.cx - hx, b.cy - hy, b.cz + hz), // 4 top-back-left
+      project(b.cx + hx, b.cy - hy, b.cz + hz), // 5 top-back-right
+      project(b.cx + hx, b.cy + hy, b.cz + hz), // 6 top-front-right
+      project(b.cx - hx, b.cy + hy, b.cz + hz), // 7 top-front-left
+    ]
 
-  const projected = vertices.map(([x, y, z]) => project(x, y, z))
+    // In manufacturing mode, the catch geometry is the offender — tint
+    // it red so the user can see the undercut without reading any text.
+    const isCatch = b.kind === 'catch'
+    const topColor = isCatch && showManufacturing ? palette.catchTop : palette.top
+    const sideColor = isCatch && showManufacturing ? palette.catchSide : palette.side
+
+    const boxFaces: { idx: number[]; color: string }[] = [
+      { idx: [4, 5, 6, 7], color: topColor }, // top
+      { idx: [0, 3, 2, 1], color: palette.bottom }, // bottom
+      { idx: [0, 1, 5, 4], color: sideColor }, // back  (Y-)
+      { idx: [3, 7, 6, 2], color: sideColor }, // front (Y+)
+      { idx: [0, 4, 7, 3], color: sideColor }, // left  (X-)
+      { idx: [1, 2, 6, 5], color: sideColor }, // right (X+)
+    ]
+
+    for (const f of boxFaces) {
+      const pts = f.idx.map((i) => v[i])
+      const avgZ = pts.reduce((s, p) => s + p.z, 0) / pts.length
+      faces.push({ pts, color: f.color, avgZ })
+    }
+  }
+
+  // Painter's algorithm — farthest faces first
+  faces.sort((a, b) => a.avgZ - b.avgZ)
 
   const edgeColor = highlightSelected ? '#3b82f6' : '#71717a'
-
-  faces.forEach((face, i) => {
-    ctx.fillStyle = faceColors[i]
+  for (const f of faces) {
+    ctx.fillStyle = f.color
     ctx.strokeStyle = edgeColor
-    ctx.lineWidth = highlightSelected ? 2 : 1.5
+    ctx.lineWidth = highlightSelected ? 2 : 1.4
     ctx.beginPath()
-    const [p0, p1, p2, p3] = face.map((idx) => projected[idx])
-    ctx.moveTo(p0.x, p0.y)
-    ctx.lineTo(p1.x, p1.y)
-    ctx.lineTo(p2.x, p2.y)
-    ctx.lineTo(p3.x, p3.y)
+    ctx.moveTo(f.pts[0].x, f.pts[0].y)
+    for (let i = 1; i < f.pts.length; i++) {
+      ctx.lineTo(f.pts[i].x, f.pts[i].y)
+    }
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
-  })
-
-  const numSegments = 32
-  ctx.fillStyle = '#18181b'
-  ctx.strokeStyle = edgeColor
-  ctx.beginPath()
-  for (let i = 0; i <= numSegments; i++) {
-    const angle = (i / numSegments) * Math.PI * 2
-    const hx = Math.cos(angle) * holeRadius
-    const hy = Math.sin(angle) * holeRadius
-    const hp = project(hx, hy, height3d)
-    if (i === 0) ctx.moveTo(hp.x, hp.y)
-    else ctx.lineTo(hp.x, hp.y)
   }
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
+
+  // Two mounting holes through the top of the base plate
+  const holeZ = 12 // top of base plate
+  const holes = [
+    { x: -36, y: 16 },
+    { x: 36, y: 16 },
+  ]
+  const holeRadius = 7
+  const segments = 32
+  ctx.fillStyle = '#09090b'
+  ctx.strokeStyle = edgeColor
+  ctx.lineWidth = 1.4
+  for (const h of holes) {
+    ctx.beginPath()
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2
+      const px = h.x + Math.cos(angle) * holeRadius
+      const py = h.y + Math.sin(angle) * holeRadius
+      const p = project(px, py, holeZ)
+      if (i === 0) ctx.moveTo(p.x, p.y)
+      else ctx.lineTo(p.x, p.y)
+    }
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
 }
 
 function drawManufacturingAnalysis(
