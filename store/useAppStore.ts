@@ -173,6 +173,7 @@ interface AppState {
 
   // AI suggestions state
   aiSuggestions: AISuggestion[]
+  addSuggestions: (suggestions: AISuggestion[]) => void
   acceptSuggestion: (id: string) => void
   rejectSuggestion: (id: string) => void
   previewSuggestion: (id: string) => void
@@ -278,6 +279,13 @@ export const useAppStore = create<AppState>((set) => ({
 
   // AI suggestions state
   aiSuggestions: initialSuggestions,
+  addSuggestions: (suggestions) =>
+    set((state) => ({
+      aiSuggestions: [
+        ...state.aiSuggestions,
+        ...suggestions.filter((s) => !state.aiSuggestions.some((e) => e.id === s.id)),
+      ],
+    })),
   acceptSuggestion: (id) =>
     set((state) => ({
       aiSuggestions: state.aiSuggestions.map((s) =>

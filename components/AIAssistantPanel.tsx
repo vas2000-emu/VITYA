@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { applyOperation } from '@/lib/orchestrate/adapter'
 import {
   ThumbsUp,
   ThumbsDown,
@@ -200,6 +201,7 @@ export function AIAssistantPanel() {
   const [message, setMessage] = useState('')
   const {
     aiSuggestions,
+    addSuggestions,
     acceptSuggestion,
     rejectSuggestion,
     previewSuggestion,
@@ -209,7 +211,18 @@ export function AIAssistantPanel() {
     isAiThinking,
     addChatMessage,
     setAiThinking,
+    updateParameterValue,
   } = useAppStore()
+
+  // Accepts a suggestion and applies its operations to the parameter store
+  // so changes reflect in the 3D model immediately.
+  const handleAccept = useCallback((id: string) => {
+    const suggestion = aiSuggestions.find((s) => s.id === id)
+    if (suggestion) {
+      suggestion.operations.forEach((op) => applyOperation(op, updateParameterValue))
+    }
+    acceptSuggestion(id)
+  }, [aiSuggestions, acceptSuggestion, updateParameterValue])
 
   const sendMessage = async (overrideText?: string) => {
     const text = (overrideText ?? message).trim()
@@ -221,7 +234,7 @@ export function AIAssistantPanel() {
     setAiThinking(true)
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('/api/orchestrate/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -235,13 +248,16 @@ export function AIAssistantPanel() {
       if (!res.ok) {
         addChatMessage({
           role: 'assistant',
-          content: `Couldn't reach the model: ${data.error ?? res.statusText}`,
+          content: `Couldn't reach the agent: ${data.error ?? res.statusText}`,
         })
       } else {
         addChatMessage({
           role: 'assistant',
           content: data.reply ?? '(no response)',
         })
+        if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+          addSuggestions(data.suggestions)
+        }
       }
     } catch {
       addChatMessage({
@@ -291,7 +307,7 @@ export function AIAssistantPanel() {
           <SuggestionCard
             key={suggestion.id}
             suggestion={suggestion}
-            onAccept={acceptSuggestion}
+            onAccept={handleAccept}
             onReject={rejectSuggestion}
             onPreview={previewSuggestion}
           />
