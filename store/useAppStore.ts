@@ -7,6 +7,41 @@ import type {
   RightPanelType,
   ChatMessage,
 } from '@/lib/types'
+import type {
+  CostResponse,
+  CoolingResponse,
+  ManufacturingCheckResponse,
+  FillingResponse,
+} from '@/lib/moldsim-api'
+
+// Simulation state types
+export interface SimulationParams {
+  material: string
+  wallThickness: number
+  partVolume: number
+  partWeight: number
+  projectedArea: number
+  partLength: number
+  partWidth: number
+  meltTemp: number
+  moldTemp: number
+  productionQuantity: number
+  complexity: 'simple' | 'moderate' | 'complex' | 'very_complex'
+  numCavities: number
+  numUndercuts: number
+  minDraftAngle: number
+  hasSharpCorners: boolean
+  hasUniformWall: boolean
+}
+
+export interface SimulationResults {
+  cost: CostResponse | null
+  cooling: CoolingResponse | null
+  dfm: ManufacturingCheckResponse | null
+  filling: FillingResponse | null
+  isLoading: boolean
+  error: string | null
+}
 
 // Mock data — feature names kept in plain English so non-CAD users can
 // read the toolbar without translating CAD jargon ("Extrude 1" -> "Base
@@ -172,6 +207,13 @@ interface AppState {
   addChatMessage: (msg: ChatMessage) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
+
+  // Simulation state
+  simulationParams: SimulationParams
+  simulationResults: SimulationResults
+  updateSimulationParams: (params: Partial<SimulationParams>) => void
+  setSimulationResults: (results: Partial<SimulationResults>) => void
+  resetSimulationResults: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -251,4 +293,51 @@ export const useAppStore = create<AppState>((set) => ({
     set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
+
+  // Simulation state
+  simulationParams: {
+    material: 'ABS',
+    wallThickness: 2.5,
+    partVolume: 50,
+    partWeight: 52,
+    projectedArea: 144,
+    partLength: 120,
+    partWidth: 120,
+    meltTemp: 240,
+    moldTemp: 60,
+    productionQuantity: 10000,
+    complexity: 'moderate',
+    numCavities: 1,
+    numUndercuts: 1,
+    minDraftAngle: 1.5,
+    hasSharpCorners: false,
+    hasUniformWall: true,
+  },
+  simulationResults: {
+    cost: null,
+    cooling: null,
+    dfm: null,
+    filling: null,
+    isLoading: false,
+    error: null,
+  },
+  updateSimulationParams: (params) =>
+    set((s) => ({
+      simulationParams: { ...s.simulationParams, ...params },
+    })),
+  setSimulationResults: (results) =>
+    set((s) => ({
+      simulationResults: { ...s.simulationResults, ...results },
+    })),
+  resetSimulationResults: () =>
+    set({
+      simulationResults: {
+        cost: null,
+        cooling: null,
+        dfm: null,
+        filling: null,
+        isLoading: false,
+        error: null,
+      },
+    }),
 }))
