@@ -263,9 +263,12 @@ function DroneArmSilhouette() {
   )
 }
 
-/** Automotive front bumper viewed head-on: long horizontal beam with
- *  wraparound ends, a central grille indent, two fog-light bezels, top
- *  lip, and a lower air dam. */
+/** Automotive front bumper viewed head-on. Matches the procedural
+ *  geometry feature-for-feature: wraparound ends, grille opening with
+ *  horizontal slats, two fog-light bezels, brake-cooling ducts, license
+ *  plate recess + light bar, tow-hook cover, upper splitter, chin
+ *  splitter, and four parking-sensor dots ghosted through from the
+ *  rear face. */
 function BumperSilhouette() {
   return (
     <svg
@@ -277,73 +280,104 @@ function BumperSilhouette() {
       <GridFloor />
 
       {/* Ground shadow */}
-      <ellipse cx="200" cy="222" rx="170" ry="6" fill="#000" opacity="0.3" />
+      <ellipse cx="200" cy="232" rx="170" ry="6" fill="#000" opacity="0.3" />
 
       <g>
-        {/* Wraparound ends — angled trapezoids at the very edges */}
+        {/* Wraparound ends — angled trapezoids that wrap toward wheel arches */}
         <path
-          d="M 30 130 L 60 105 L 60 195 L 30 215 Z"
+          d="M 18 130 L 60 100 L 60 210 L 18 225 Z"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
         <path
-          d="M 370 130 L 340 105 L 340 195 L 370 215 Z"
+          d="M 382 130 L 340 100 L 340 210 L 382 225 Z"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
 
-        {/* Main horizontal beam */}
+        {/* Main horizontal body */}
         <rect
           x="60"
-          y="100"
+          y="92"
           width="280"
-          height="100"
+          height="120"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
 
-        {/* Top lip — sits flush along the top edge of the beam */}
-        <rect x="68" y="92" width="264" height="12" fill="#52525b" stroke="#a1a1aa" strokeWidth="0.8" />
+        {/* Upper splitter / hood-line trim */}
+        <rect x="72" y="90" width="256" height="6" fill="#a1a1aa" stroke="#d4d4d8" strokeWidth="0.6" />
 
+        {/* Chin splitter (lower) */}
+        <rect x="80" y="216" width="240" height="4" fill="#27272a" stroke="#71717a" strokeWidth="0.5" />
         {/* Lower air dam */}
-        <rect x="72" y="198" width="256" height="14" fill="#3f3f46" stroke="#71717a" strokeWidth="0.8" />
+        <rect x="80" y="210" width="240" height="8" fill="#3f3f46" stroke="#71717a" strokeWidth="0.6" />
 
-        {/* Central grille indent — slightly recessed (darker) */}
-        <rect
-          x="155"
-          y="125"
-          width="90"
-          height="50"
-          fill="#1f1f23"
+        {/* Central grille opening — recessed dark trapezoid */}
+        <path
+          d="M 145 120 L 255 120 L 255 175 L 145 175 Z"
+          fill="#0a0a0c"
           stroke="#71717a"
           strokeWidth="1"
         />
         {/* Horizontal grille slats */}
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <line
             key={`slat-${i}`}
-            x1="160"
-            x2="240"
-            y1={134 + i * 11}
-            y2={134 + i * 11}
+            x1="150"
+            x2="250"
+            y1={126 + i * 11}
+            y2={126 + i * 11}
             stroke="#52525b"
-            strokeWidth="1.4"
+            strokeWidth="1.8"
           />
         ))}
 
+        {/* Tow-hook cover — small rectangle on left edge of grille */}
+        <rect x="116" y="135" width="18" height="18" fill="#3f3f46" stroke="#71717a" strokeWidth="0.8" />
+        <line x1="118" y1="144" x2="132" y2="144" stroke="#52525b" strokeWidth="0.5" strokeDasharray="1 1" />
+
+        {/* License plate recess (above grille) */}
+        <rect x="170" y="100" width="60" height="18" fill="#1f1f23" stroke="#71717a" strokeWidth="0.8" />
+        {/* License plate light bar above the recess */}
+        <rect x="180" y="96" width="40" height="2.5" fill="#a1a1aa" stroke="#d4d4d8" strokeWidth="0.3" />
+
         {/* Fog-light bezels — circles on either side of the grille */}
-        <circle cx="100" cy="160" r="18" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
-        <circle cx="100" cy="160" r="9" fill="#27272a" />
-        <circle cx="300" cy="160" r="18" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
-        <circle cx="300" cy="160" r="9" fill="#27272a" />
+        <circle cx="100" cy="150" r="20" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
+        <circle cx="100" cy="150" r="11" fill="#27272a" />
+        <circle cx="100" cy="150" r="4" fill="#fef08a" opacity="0.4" />
+
+        <circle cx="300" cy="150" r="20" fill="#1f1f23" stroke="#71717a" strokeWidth="1.2" />
+        <circle cx="300" cy="150" r="11" fill="#27272a" />
+        <circle cx="300" cy="150" r="4" fill="#fef08a" opacity="0.4" />
+
+        {/* Brake-cooling ducts below each fog light */}
+        <rect x="84" y="182" width="32" height="6" fill="#0a0a0c" stroke="#71717a" strokeWidth="0.6" />
+        <rect x="284" y="182" width="32" height="6" fill="#0a0a0c" stroke="#71717a" strokeWidth="0.6" />
+
+        {/* Parking sensor pucks — ghosted through from the rear face.
+            Dashed circles to indicate they're on the back side. */}
+        {[155, 185, 215, 245].map((x) => (
+          <circle
+            key={`sensor-${x}`}
+            cx={x}
+            cy="195"
+            r="3.5"
+            fill="none"
+            stroke="#71717a"
+            strokeWidth="0.8"
+            strokeDasharray="1.5 1.5"
+            opacity="0.7"
+          />
+        ))}
       </g>
 
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
-        <text x="200" y="240" textAnchor="middle">1700 mm</text>
-        <text x="20" y="160" textAnchor="middle" transform="rotate(-90 20 160)">
+        <text x="200" y="252" textAnchor="middle">1700 mm</text>
+        <text x="14" y="155" textAnchor="middle" transform="rotate(-90 14 155)">
           450 mm
         </text>
       </g>
