@@ -5,9 +5,11 @@ import type { PartId } from '@/lib/types'
 /**
  * Lightweight per-part SVG silhouettes for the dashboard PartPreview.
  *
- * Replaces the WebGL MiniViewport so the only active WebGL context is
- * the workspace viewport — keeps us well under Chrome's per-tab cap and
- * lets the dashboard render on machines without GPUs.
+ * Each silhouette is drawn to MATCH the procedural geometry in
+ * components/viewport/partGeometry.ts so the dashboard's 2D preview
+ * and the workspace's 3D viewport tell the same story. Hotspot
+ * percentages in lib/mockMoldAnalysis.ts are tuned to land on the
+ * corresponding feature in each silhouette.
  */
 export function PartSilhouette({ partId }: { partId: PartId }) {
   switch (partId) {
@@ -50,6 +52,9 @@ function Defs() {
   )
 }
 
+/** L-shaped bracket viewed from the FRONT (matches the 3D part):
+ *  horizontal base + vertical wall on the left + stiffener rib in the
+ *  corner + snap-fit hook protruding from the top of the wall. */
 function BracketSilhouette() {
   return (
     <svg
@@ -59,27 +64,68 @@ function BracketSilhouette() {
     >
       <Defs />
       <GridFloor />
+
+      {/* Floor shadow */}
+      <ellipse cx="200" cy="248" rx="160" ry="6" fill="#000" opacity="0.25" />
+
       <g>
-        <path
-          d="M80 200 L80 130 Q80 110 100 110 L260 110 Q280 110 280 130 L280 200 Z"
+        {/* Horizontal base: full footprint */}
+        <rect
+          x="55"
+          y="210"
+          width="290"
+          height="32"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
-        <path d="M70 120 L290 120 L300 105 L80 105 Z" fill="#52525b" stroke="#71717a" />
-        <path d="M280 130 L300 130 L305 140 L300 150 L280 150 Z" fill="#3f3f46" stroke="#71717a" />
-        <circle cx="120" cy="155" r="8" fill="#09090b" stroke="#71717a" />
-        <circle cx="240" cy="155" r="8" fill="#09090b" stroke="#71717a" />
-        <path d="M110 175 L250 175 L250 195 L110 195 Z" fill="#09090b" opacity="0.6" />
+
+        {/* Vertical wall: sits on the LEFT edge of the base, growing
+            upward. Matches the 3D geometry exactly. */}
+        <rect
+          x="55"
+          y="80"
+          width="36"
+          height="130"
+          fill="url(#partFill)"
+          stroke="url(#partEdge)"
+          strokeWidth="1.5"
+        />
+
+        {/* Stiffener rib: triangular wedge tucked into the corner where
+            the wall meets the base. */}
+        <polygon
+          points="91,210 91,140 165,210"
+          fill="#3f3f46"
+          stroke="#71717a"
+          strokeWidth="1"
+        />
+
+        {/* Snap-fit hook: small overhang protruding right from the TOP
+            of the wall — this is the "undercut" issue. */}
+        <path
+          d="M 91 84 L 130 84 L 134 92 L 130 100 L 91 100 Z"
+          fill="#52525b"
+          stroke="#a1a1aa"
+          strokeWidth="1"
+        />
+
+        {/* Top-of-wall accent line so the wall reads as 3D */}
+        <line x1="55" y1="80" x2="91" y2="80" stroke="#a1a1aa" strokeWidth="1.2" />
       </g>
+
+      {/* Dimension hints */}
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
-        <text x="180" y="245" textAnchor="middle">120 mm</text>
-        <text x="40" y="160" textAnchor="middle">90 mm</text>
+        <text x="200" y="265" textAnchor="middle">120 mm</text>
+        <text x="40" y="145" textAnchor="end">90 mm</text>
       </g>
     </svg>
   )
 }
 
+/** Phone case back viewed from the BACK (inside-up): rounded outer
+ *  shell with a rounded inner cavity. No camera cutout — the procedural
+ *  geometry doesn't have one. */
 function PhoneCaseSilhouette() {
   return (
     <svg
@@ -89,42 +135,58 @@ function PhoneCaseSilhouette() {
     >
       <Defs />
       <GridFloor />
+
+      {/* Floor shadow */}
+      <ellipse cx="200" cy="260" rx="80" ry="5" fill="#000" opacity="0.25" />
+
       <g>
-        {/* Outer shell */}
+        {/* Outer shell — rounded rect, taller than wide */}
         <rect
-          x="140"
-          y="55"
-          width="120"
-          height="200"
-          rx="16"
+          x="155"
+          y="40"
+          width="90"
+          height="220"
+          rx="14"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
-        {/* Inner cavity */}
+
+        {/* Inner cavity (where the phone sits) */}
         <rect
-          x="148"
-          y="63"
-          width="104"
-          height="184"
-          rx="12"
+          x="163"
+          y="48"
+          width="74"
+          height="204"
+          rx="9"
           fill="#09090b"
-          opacity="0.7"
+          opacity="0.85"
+          stroke="#52525b"
+          strokeWidth="0.6"
         />
-        {/* Camera cutout */}
-        <circle cx="180" cy="85" r="10" fill="#09090b" stroke="#71717a" />
-        <circle cx="180" cy="85" r="5" fill="#27272a" />
-        {/* Speaker grille */}
-        <line x1="195" y1="230" x2="225" y2="230" stroke="#71717a" strokeWidth="2" />
+
+        {/* Corner radius indicator (top-left) to make it read as a real
+            molded part rather than a flat rectangle */}
+        <path
+          d="M 169 56 Q 169 50 175 50"
+          fill="none"
+          stroke="#a1a1aa"
+          strokeWidth="0.8"
+          strokeDasharray="2 2"
+        />
       </g>
+
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
-        <text x="200" y="275" textAnchor="middle">70 × 140 mm</text>
-        <text x="115" y="155" textAnchor="end">8 mm</text>
+        <text x="200" y="278" textAnchor="middle">70 × 140 mm</text>
+        <text x="138" y="155" textAnchor="end">1.4 mm wall</text>
       </g>
     </svg>
   )
 }
 
+/** Drone arm viewed from the TOP (matches the 3D geometry): central
+ *  body block on the left + long thin arm + motor-mount disc + motor
+ *  stub at the outboard end. */
 function DroneArmSilhouette() {
   return (
     <svg
@@ -134,37 +196,66 @@ function DroneArmSilhouette() {
     >
       <Defs />
       <GridFloor />
+
+      {/* Floor shadow */}
+      <ellipse cx="200" cy="200" rx="180" ry="5" fill="#000" opacity="0.25" />
+
       <g>
-        {/* Center body */}
+        {/* Central body block — square-ish on the inboard end */}
         <rect
           x="40"
-          y="135"
-          width="55"
-          height="30"
+          y="120"
+          width="62"
+          height="60"
           rx="3"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
-        {/* Arm */}
+
+        {/* Arm: starts at the right edge of the center block, extends
+            most of the way to the right */}
         <rect
-          x="95"
-          y="143"
-          width="230"
-          height="14"
+          x="102"
+          y="140"
+          width="200"
+          height="22"
           fill="url(#partFill)"
           stroke="url(#partEdge)"
           strokeWidth="1.5"
         />
-        {/* Motor mount disc */}
-        <circle cx="330" cy="150" r="22" fill="#52525b" stroke="#71717a" />
-        <circle cx="330" cy="150" r="14" fill="#27272a" stroke="#71717a" />
-        {/* Motor stub */}
-        <rect x="320" y="120" width="20" height="14" rx="2" fill="#3f3f46" stroke="#71717a" />
+
+        {/* Motor mount disc at the outboard end */}
+        <circle
+          cx="320"
+          cy="151"
+          r="30"
+          fill="#52525b"
+          stroke="#a1a1aa"
+          strokeWidth="1.2"
+        />
+        {/* Inner motor pocket */}
+        <circle
+          cx="320"
+          cy="151"
+          r="15"
+          fill="#1f1f23"
+          stroke="#71717a"
+          strokeWidth="0.8"
+        />
+
+        {/* Mount bolt circle */}
+        {[0, 1, 2, 3].map((i) => {
+          const a = (i * Math.PI) / 2 + Math.PI / 4
+          const cx = 320 + Math.cos(a) * 22
+          const cy = 151 + Math.sin(a) * 22
+          return <circle key={i} cx={cx} cy={cy} r="1.8" fill="#27272a" stroke="#71717a" strokeWidth="0.5" />
+        })}
       </g>
+
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
-        <text x="180" y="190" textAnchor="middle">180 mm arm</text>
-        <text x="330" y="195" textAnchor="middle">Ø36 motor</text>
+        <text x="200" y="190" textAnchor="middle">180 mm arm</text>
+        <text x="320" y="200" textAnchor="middle">Ø60 motor mount</text>
       </g>
     </svg>
   )
