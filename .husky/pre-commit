@@ -1,1 +1,12 @@
+#!/usr/bin/env sh
+# GUI git clients (GitHub Desktop, Sourcetree, VSCode source-control panel)
+# launch hooks with a stripped PATH that excludes nvm and Homebrew, so
+# `pnpm` resolves only when the hook is run from a terminal. Hydrate
+# PATH and source nvm so the hook works in both environments.
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  export NVM_DIR="$HOME/.nvm"
+  . "$HOME/.nvm/nvm.sh"
+fi
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 pnpm exec lint-staged

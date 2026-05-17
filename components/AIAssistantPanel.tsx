@@ -30,9 +30,14 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
     prompt: 'Are the draft angles on this part sufficient for clean ejection?',
   },
   {
-    label: 'Optimize',
+    label: 'Explain the mold',
     prompt:
-      'How can I optimize this part for cheaper, faster Michigan injection molding?',
+      'Walk me through the mold for this part — cavity, core, parting line, and gate. What should I be thinking about?',
+  },
+  {
+    label: 'Find local shops',
+    prompt:
+      'Once this part is design-ready, which local shops could build it? My ZIP is 49503.',
   },
 ]
 
@@ -212,7 +217,7 @@ export function AIAssistantPanel() {
     if (!text || isAiThinking) return
     setMessage('')
 
-    const userMsg: ChatMessage = { role: 'user', content: text }
+    const userMsg = { role: 'user' as const, content: text }
     addChatMessage(userMsg)
     setAiThinking(true)
 
@@ -220,7 +225,12 @@ export function AIAssistantPanel() {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...chatMessages, userMsg] }),
+        body: JSON.stringify({
+          messages: [
+            ...chatMessages.map(({ role, content }) => ({ role, content })),
+            userMsg,
+          ],
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -296,12 +306,12 @@ export function AIAssistantPanel() {
           </div>
         ) : (
           <div className="space-y-2">
-            {chatMessages.map((m, i) => (
-              <ChatBubble key={i} message={m} />
+            {chatMessages.map((m) => (
+              <ChatBubble key={m.id} message={m} />
             ))}
             {isAiThinking && (
               <ChatBubble
-                message={{ role: 'assistant', content: 'Thinking…' }}
+                message={{ id: 'thinking', role: 'assistant', content: 'Thinking…' }}
                 muted
               />
             )}

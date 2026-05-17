@@ -1,12 +1,10 @@
 'use client'
 
-import { FeatureTree } from '@/components/FeatureTree'
 import { ViewportContainer } from '@/components/ViewportContainer'
 import { AIAssistantPanel } from '@/components/AIAssistantPanel'
 import { ParameterPanel } from '@/components/ParameterPanel'
 import { ManufacturingPanel } from '@/components/ManufacturingPanel'
 import { Toolbar } from '@/components/Toolbar'
-import { GeometryDiff } from '@/components/GeometryDiff'
 import { LandingPage } from '@/components/LandingPage'
 import { useAppStore } from '@/store/useAppStore'
 
@@ -30,25 +28,17 @@ export default function CADPage() {
       <Toolbar />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Feature Tree */}
-        <aside
-          className={`flex-shrink-0 transition-all duration-200 ${
-            leftCollapsed ? 'w-12' : 'w-64'
-          }`}
-        >
-          <FeatureTree />
-        </aside>
+        {/* Left Panel - Parameters only */}
+        {!leftCollapsed && (
+          <aside className="flex-shrink-0 w-64 transition-all duration-200">
+            <ParameterPanel />
+          </aside>
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* 3D Viewport */}
           <div className="flex-1">
             <ViewportContainer />
-          </div>
-
-          {/* Parameters Panel */}
-          <div className="h-48">
-            <ParameterPanel />
           </div>
         </main>
 
@@ -91,9 +81,6 @@ export default function CADPage() {
           </div>
         </aside>
       </div>
-
-      {/* Geometry Diff Modal */}
-      <GeometryDiff />
     </div>
   )
 }

@@ -56,19 +56,35 @@ export function LandingPage() {
             >
               Community
             </button>
-            <button className="px-3 py-2 text-sm hover:bg-zinc-800 rounded">
+            <button
+              onClick={handleLearn}
+              className="px-3 py-2 text-sm hover:bg-zinc-800 rounded"
+            >
               Documentation
             </button>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <button className="flex items-center gap-1 px-3 py-2 text-sm hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            className="flex items-center gap-1 px-3 py-2 text-sm hover:bg-zinc-800 rounded"
+          >
             US
             <ChevronDown className="size-3" />
           </button>
-          <button className="px-4 py-2 text-sm hover:bg-zinc-800 rounded">Sign In</button>
-          <button className="md:hidden p-2 hover:bg-zinc-800 rounded">
+          <button
+            type="button"
+            onClick={() => setAuthenticated(true)}
+            className="px-4 py-2 text-sm hover:bg-zinc-800 rounded"
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className="md:hidden p-2 hover:bg-zinc-800 rounded"
+          >
             <Menu className="size-5" />
           </button>
         </div>
@@ -85,16 +101,17 @@ export function LandingPage() {
             </div>
 
             <h1 className="text-4xl lg:text-5xl font-bold leading-tight">
-              AI-Powered Parametric CAD
+              Design for the mold,
               <span className="block mt-2 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                for Injection Molding
+                before you cut steel.
               </span>
             </h1>
 
             <p className="text-lg text-zinc-400 max-w-xl">
-              MoldLocal is a next-generation solution that gives you AI-assisted parametric
-              modeling, real-time manufacturing analysis, and intelligent design suggestions
-              for your everyday engineering needs.
+              MoldLocal helps you iterate a plastic part toward something a local injection
+              molder can actually build. See the cavity, core, and parting line your geometry
+              implies. Catch undercuts, draft, and wall-thickness issues before tooling
+              quotes come back twice as expensive.
             </p>
           </div>
 
@@ -199,7 +216,11 @@ export function LandingPage() {
 
                 <div className="text-center text-sm text-zinc-400">
                   {"Don't have an account? "}
-                  <button className="text-blue-400 hover:text-blue-300 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setAuthenticated(true)}
+                    className="text-blue-400 hover:text-blue-300 font-medium"
+                  >
                     Sign up
                   </button>
                 </div>
@@ -242,7 +263,12 @@ export function LandingPage() {
                 Learn the basics of parametric CAD modeling, feature trees, and constraints in
                 under 30 minutes.
               </p>
-              <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="text-blue-400/50 text-sm font-medium cursor-not-allowed"
+              >
                 Start Tutorial
               </button>
             </div>
@@ -274,7 +300,12 @@ export function LandingPage() {
                 Watch step-by-step video guides covering everything from basic sketches to
                 advanced AI operations.
               </p>
-              <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="text-blue-400/50 text-sm font-medium cursor-not-allowed"
+              >
                 Watch Videos
               </button>
             </div>
@@ -300,7 +331,12 @@ export function LandingPage() {
                 Discover how to leverage AI suggestions for optimal design quality and
                 manufacturability.
               </p>
-              <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="text-blue-400/50 text-sm font-medium cursor-not-allowed"
+              >
                 Learn More
               </button>
             </div>
@@ -343,7 +379,12 @@ export function LandingPage() {
                     Ask questions, share your designs, and get help from experienced users and
                     our engineering team.
                   </p>
-                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium">
+                  <button
+                    type="button"
+                    disabled
+                    title="Coming soon"
+                    className="px-4 py-2 bg-blue-600/40 rounded text-sm font-medium cursor-not-allowed"
+                  >
                     Visit Forum
                   </button>
                 </div>
@@ -363,7 +404,12 @@ export function LandingPage() {
                     Follow us for the latest updates, tips, and showcase of amazing designs from
                     the community.
                   </p>
-                  <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm font-medium border border-zinc-700">
+                  <button
+                    type="button"
+                    disabled
+                    title="Coming soon"
+                    className="px-4 py-2 bg-zinc-800/60 rounded text-sm font-medium border border-zinc-700 cursor-not-allowed"
+                  >
                     Follow Us
                   </button>
                 </div>
@@ -377,7 +423,11 @@ export function LandingPage() {
               Show off your latest projects, get feedback from peers, and inspire others. The
               best designs are featured in our monthly showcase!
             </p>
-            <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium">
+            <button
+              type="button"
+              onClick={() => setAuthenticated(true)}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium"
+            >
               Upload Your Design
             </button>
           </div>

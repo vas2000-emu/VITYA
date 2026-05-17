@@ -1,9 +1,7 @@
 import { create } from 'zustand'
 import type {
-  Feature,
   AISuggestion,
   Parameter,
-  ManufacturingIssue,
   RightPanelType,
   ChatMessage,
 } from '@/lib/types'
@@ -13,6 +11,7 @@ import type {
   ManufacturingCheckResponse,
   FillingResponse,
 } from '@/lib/moldsim-api'
+import { getMaterial } from '@/lib/moldsim/materials'
 
 // Simulation state types
 export interface SimulationParams {
@@ -23,6 +22,7 @@ export interface SimulationParams {
   projectedArea: number
   partLength: number
   partWidth: number
+  partHeight: number
   meltTemp: number
   moldTemp: number
   productionQuantity: number
@@ -34,6 +34,22 @@ export interface SimulationParams {
   hasUniformWall: boolean
 }
 
+/** Snapshot of the most recently loaded preset's dimensions, wall, and
+ *  material. updateSimulationParams uses this as the reference point
+ *  when scaling derived fields (volume/weight/projectedArea) in
+ *  response to live edits, so the demo numbers stay near the curated
+ *  baseline values when the user hasn't deviated. */
+export interface SimulationBaseline {
+  material: string
+  wallThickness: number
+  partVolume: number
+  partWeight: number
+  projectedArea: number
+  partLength: number
+  partWidth: number
+  partHeight: number
+}
+
 export interface SimulationResults {
   cost: CostResponse | null
   cooling: CoolingResponse | null
@@ -42,27 +58,6 @@ export interface SimulationResults {
   isLoading: boolean
   error: string | null
 }
-
-// Mock data — feature names kept in plain English so non-CAD users can
-// read the toolbar without translating CAD jargon ("Extrude 1" -> "Base
-// Body", "Hole 1" -> "Mounting Hole", etc).
-const initialFeatures: Feature[] = [
-  {
-    id: 'origin',
-    name: 'Origin',
-    type: 'origin',
-    children: [
-      { id: 'top', name: 'Top Plane', type: 'plane' },
-      { id: 'front', name: 'Front Plane', type: 'plane' },
-      { id: 'right', name: 'Right Plane', type: 'plane' },
-    ],
-  },
-  { id: 'sketch1', name: 'Sketch 1', type: 'sketch' },
-  { id: 'sketch2', name: 'Sketch 2', type: 'sketch' },
-  { id: 'baseBody', name: 'Base Body', type: 'extrude' },
-  { id: 'mountingHole', name: 'Mounting Hole', type: 'hole' },
-  { id: 'edgeRounds', name: 'Edge Rounds', type: 'fillet' },
-]
 
 const initialSuggestions: AISuggestion[] = [
   {
@@ -106,58 +101,17 @@ const initialSuggestions: AISuggestion[] = [
   },
 ]
 
+// Parameter IDs must match the keys in ParameterPanel's paramToSimulationKey
+// table so editing values syncs through to simulationParams. The geometry
+// rebuild in components/viewport/Part.tsx also keys off these IDs. Initial
+// values track the bumper baseline (the default current part) — these get
+// overwritten by useResultsStore.selectPart() when the user switches parts.
 const initialParameters: Parameter[] = [
-  { id: 'p1', name: 'Base Width', value: 120, unit: 'mm', locked: true, constraint: 'width' },
-  { id: 'p2', name: 'Base Length', value: 120, unit: 'mm', locked: false },
-  { id: 'p3', name: 'Height', value: 40, unit: 'mm', locked: false },
-  { id: 'p4', name: 'Hole Diameter', value: 30, unit: 'mm', locked: false, constraint: 'diameter' },
-  { id: 'p5', name: 'Wall Thickness', value: 2.5, unit: 'mm', locked: false },
-  { id: 'p6', name: 'Fillet Radius', value: 2, unit: 'mm', locked: false },
-]
-
-const initialIssues: ManufacturingIssue[] = [
-  {
-    id: '1',
-    type: 'error',
-    category: 'Undercuts',
-    title: 'Undercut detected on side face',
-    description: 'Geometry prevents part ejection from mold in the current parting direction.',
-    location: 'Face 12',
-    suggestion: 'Add draft angle or modify geometry to eliminate undercut.',
-  },
-  {
-    id: '2',
-    type: 'warning',
-    category: 'Draft Angles',
-    title: 'Insufficient draft angle',
-    description: 'Draft angle is 1.5°, recommended minimum is 3° for this material.',
-    location: 'Faces 4, 5, 6, 7',
-    suggestion: 'Increase draft angle to 3° or greater.',
-  },
-  {
-    id: '3',
-    type: 'success',
-    category: 'Wall Thickness',
-    title: 'Wall thickness within range',
-    description: 'Wall thickness is 2.5mm, within recommended range (2-4mm).',
-    location: 'All walls',
-  },
-  {
-    id: '4',
-    type: 'success',
-    category: 'Draft Angles',
-    title: 'Top faces have adequate draft',
-    description: 'Draft angles on top faces range from 3° to 5°.',
-    location: 'Faces 8, 9, 10, 11',
-  },
-  {
-    id: '5',
-    type: 'info',
-    category: 'Parting Line',
-    title: 'Parting line location',
-    description: 'Recommended parting line at mid-height of part.',
-    location: 'Z = 20mm',
-  },
+  { id: 'p-len', name: 'Part Length', value: 1700, unit: 'mm', locked: false },
+  { id: 'p-wid', name: 'Part Width', value: 450, unit: 'mm', locked: false },
+  { id: 'p-height', name: 'Height', value: 380, unit: 'mm', locked: false },
+  { id: 'p-draft', name: 'Draft Angle', value: 2, unit: '°', locked: false },
+  { id: 'p-wall', name: 'Wall Thickness', value: 3, unit: 'mm', locked: false },
 ]
 
 interface AppState {
@@ -165,11 +119,6 @@ interface AppState {
   isAuthenticated: boolean
   setAuthenticated: (auth: boolean) => void
   logout: () => void
-
-  // Feature state
-  features: Feature[]
-  selectedFeature: string | null
-  selectFeature: (id: string | null) => void
 
   // AI suggestions state
   aiSuggestions: AISuggestion[]
@@ -181,17 +130,13 @@ interface AppState {
   parameters: Parameter[]
   toggleParameterLock: (id: string) => void
   updateParameterValue: (id: string, value: number) => void
-
-  // Manufacturing issues
-  manufacturingIssues: ManufacturingIssue[]
+  addParameter: () => void
 
   // Preview mode
   previewMode: boolean
   setPreviewMode: (mode: boolean) => void
 
   // UI state
-  showDiff: boolean
-  setShowDiff: (show: boolean) => void
   showManufacturing: boolean
   setShowManufacturing: (show: boolean) => void
   rightPanel: RightPanelType
@@ -204,16 +149,123 @@ interface AppState {
   // AI chat panel state
   chatMessages: ChatMessage[]
   isAiThinking: boolean
-  addChatMessage: (msg: ChatMessage) => void
+  addChatMessage: (msg: Omit<ChatMessage, 'id'> | ChatMessage) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
 
-  // Simulation state
+  // Viewport state — lives in the store so renderer can be swapped
+  // (canvas2D ↔ r3f) and so cross-component toolbar / feature-tree
+  // can drive the camera without prop-drilling.
+  viewportActiveView: ViewportPreset | null
+  viewportTool: ViewportTool
+  viewportGrid: boolean
+  viewportHeatmap: boolean
+  viewportZoomNudge: number // bump this to push camera closer (+) / farther (-)
+  viewportMoldMode: MoldMode
+  setViewportView: (view: ViewportPreset | null) => void
+  setViewportTool: (tool: ViewportTool) => void
+  toggleViewportGrid: () => void
+  toggleViewportHeatmap: () => void
+  nudgeZoom: (delta: number) => void
+  setViewportMoldMode: (mode: MoldMode) => void
+
+  // STL upload / current part
+  uploadedSTL: string | null
+  setUploadedSTL: (url: string | null) => void
+  currentPartId: string
+  setCurrentPartId: (id: string) => void
+
+  // Current part's world-space AABB — published by Part.tsx so Mold.tsx
+  // can size the cavity/core blocks around it without a parent prop.
+  // Stored as flattened tuple [minX, minY, minZ, maxX, maxY, maxZ] so
+  // we can do shallow-equality checks in zustand.
+  partBounds: [number, number, number, number, number, number] | null
+  setPartBounds: (b: [number, number, number, number, number, number] | null) => void
+
+  // Simulation state (moldsim backend)
   simulationParams: SimulationParams
+  simulationBaseline: SimulationBaseline
   simulationResults: SimulationResults
   updateSimulationParams: (params: Partial<SimulationParams>) => void
+  setSimulationBaseline: (b: SimulationBaseline) => void
   setSimulationResults: (results: Partial<SimulationResults>) => void
   resetSimulationResults: () => void
+}
+
+export type ViewportPreset = 'home' | 'isometric' | 'front' | 'top' | 'right'
+export type ViewportTool = 'rotate' | 'pan'
+/** Mold visualization mode controlled from ViewportToolbar:
+ *   - 'part'  = part only (default; original behavior)
+ *   - 'mold'  = mold blocks visible, part hidden
+ *   - 'both'  = part + transparent mold blocks overlaid
+ */
+export type MoldMode = 'part' | 'mold' | 'both'
+
+let chatIdCounter = 0
+const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
+
+let parameterIdCounter = 0
+const nextParameterId = () => `param-${Date.now()}-${parameterIdCounter++}`
+
+/** g/cm³ for a material name. melt_density is stored in kg/m³, divide by
+ *  1000 to convert. Falls back to ABS-ish density if name is unknown. */
+function densityGPerCm3(material: string): number {
+  const mat = getMaterial(material)
+  return mat ? mat.melt_density / 1000 : 1.05
+}
+
+/**
+ * Apply scaling to derived fields (partVolume / partWeight /
+ * projectedArea) whenever a dimension, wall thickness, or material
+ * changes — relative to the current simulationBaseline. Without this,
+ * editing Height in the Parameters panel would update the geometry
+ * scale and the max-size DFM check but leave cost/cooling math at the
+ * preset value.
+ *
+ * Volume scales with bbox volume × wall thickness (thin-shell proxy).
+ * Weight scales with volume × density. Projected area scales with the
+ * footprint (L × W) only — height doesn't change footprint.
+ *
+ * Anything explicitly supplied in `patch` overrides the derived value
+ * — so loading a fresh preset (which sets all four directly) still
+ * writes preset numbers verbatim.
+ */
+function deriveScaledSimParams(
+  current: SimulationParams,
+  patch: Partial<SimulationParams>,
+  baseline: SimulationBaseline,
+): SimulationParams {
+  const merged: SimulationParams = { ...current, ...patch }
+
+  const touchedDims =
+    'partLength' in patch ||
+    'partWidth' in patch ||
+    'partHeight' in patch ||
+    'wallThickness' in patch ||
+    'material' in patch
+
+  if (!touchedDims) return merged
+
+  const sizeRatio =
+    (merged.partLength * merged.partWidth * merged.partHeight) /
+    Math.max(1, baseline.partLength * baseline.partWidth * baseline.partHeight)
+  const wallRatio = merged.wallThickness / Math.max(0.01, baseline.wallThickness)
+  const footprintRatio =
+    (merged.partLength * merged.partWidth) /
+    Math.max(1, baseline.partLength * baseline.partWidth)
+  const densityRatio =
+    densityGPerCm3(merged.material) / Math.max(0.01, densityGPerCm3(baseline.material))
+
+  if (!('partVolume' in patch)) {
+    merged.partVolume = baseline.partVolume * sizeRatio * wallRatio
+  }
+  if (!('partWeight' in patch)) {
+    merged.partWeight = baseline.partWeight * sizeRatio * wallRatio * densityRatio
+  }
+  if (!('projectedArea' in patch)) {
+    merged.projectedArea = baseline.projectedArea * footprintRatio
+  }
+  return merged
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -221,11 +273,6 @@ export const useAppStore = create<AppState>((set) => ({
   isAuthenticated: false,
   setAuthenticated: (auth) => set({ isAuthenticated: auth }),
   logout: () => set({ isAuthenticated: false }),
-
-  // Feature state
-  features: initialFeatures,
-  selectedFeature: null,
-  selectFeature: (id) => set({ selectedFeature: id }),
 
   // AI suggestions state
   aiSuggestions: initialSuggestions,
@@ -267,17 +314,25 @@ export const useAppStore = create<AppState>((set) => ({
         p.id === id ? { ...p, value } : p
       ),
     })),
-
-  // Manufacturing issues
-  manufacturingIssues: initialIssues,
+  addParameter: () =>
+    set((state) => ({
+      parameters: [
+        ...state.parameters,
+        {
+          id: nextParameterId(),
+          name: `Parameter ${state.parameters.length + 1}`,
+          value: 0,
+          unit: 'mm',
+          locked: false,
+        },
+      ],
+    })),
 
   // Preview mode
   previewMode: false,
   setPreviewMode: (mode) => set({ previewMode: mode }),
 
   // UI state
-  showDiff: false,
-  setShowDiff: (show) => set({ showDiff: show }),
   showManufacturing: false,
   setShowManufacturing: (show) => set({ showManufacturing: show }),
   rightPanel: 'ai',
@@ -290,28 +345,71 @@ export const useAppStore = create<AppState>((set) => ({
   chatMessages: [],
   isAiThinking: false,
   addChatMessage: (msg) =>
-    set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+    set((s) => ({
+      chatMessages: [
+        ...s.chatMessages,
+        'id' in msg && msg.id ? msg : { ...msg, id: nextChatId() },
+      ],
+    })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
 
-  // Simulation state
+  // Viewport state — drives the r3f scene. Defaults match the previous
+  // canvas-2D viewport so the visual baseline is unchanged.
+  viewportActiveView: 'isometric',
+  viewportTool: 'rotate',
+  viewportGrid: true,
+  viewportHeatmap: true,
+  viewportZoomNudge: 0,
+  viewportMoldMode: 'part',
+  setViewportView: (view) => set({ viewportActiveView: view }),
+  setViewportTool: (tool) => set({ viewportTool: tool }),
+  toggleViewportGrid: () => set((s) => ({ viewportGrid: !s.viewportGrid })),
+  toggleViewportHeatmap: () => set((s) => ({ viewportHeatmap: !s.viewportHeatmap })),
+  nudgeZoom: (delta) => set((s) => ({ viewportZoomNudge: s.viewportZoomNudge + delta })),
+  setViewportMoldMode: (mode) => set({ viewportMoldMode: mode }),
+
+  // STL upload / current part library. Bumper is the hero demo part —
+  // see lib/mockMoldAnalysis.ts moldAnalysisData for the matching
+  // dashboard analysis default.
+  uploadedSTL: null,
+  setUploadedSTL: (url) => set({ uploadedSTL: url }),
+  currentPartId: 'bumper',
+  setCurrentPartId: (id) => set({ currentPartId: id }),
+  partBounds: null,
+  setPartBounds: (b) => set({ partBounds: b }),
+
+  // Simulation state (moldsim backend). Defaults match the bumper hero
+  // demo case — keep these in sync with lib/partSimInputs.ts.bumper so
+  // the analysis pages light up with bumper data on first load.
   simulationParams: {
-    material: 'ABS',
-    wallThickness: 2.5,
-    partVolume: 50,
-    partWeight: 52,
-    projectedArea: 144,
-    partLength: 120,
-    partWidth: 120,
-    meltTemp: 240,
-    moldTemp: 60,
-    productionQuantity: 10000,
-    complexity: 'moderate',
+    material: 'PP',
+    wallThickness: 3,
+    partVolume: 1200,
+    partWeight: 1100,
+    projectedArea: 6500,
+    partLength: 1700,
+    partWidth: 450,
+    partHeight: 380,
+    meltTemp: 230,
+    moldTemp: 50,
+    productionQuantity: 50_000,
+    complexity: 'very_complex',
     numCavities: 1,
-    numUndercuts: 1,
-    minDraftAngle: 1.5,
+    numUndercuts: 3,
+    minDraftAngle: 2,
     hasSharpCorners: false,
-    hasUniformWall: true,
+    hasUniformWall: false,
+  },
+  simulationBaseline: {
+    material: 'PP',
+    wallThickness: 3,
+    partVolume: 1200,
+    partWeight: 1100,
+    projectedArea: 6500,
+    partLength: 1700,
+    partWidth: 450,
+    partHeight: 380,
   },
   simulationResults: {
     cost: null,
@@ -323,8 +421,13 @@ export const useAppStore = create<AppState>((set) => ({
   },
   updateSimulationParams: (params) =>
     set((s) => ({
-      simulationParams: { ...s.simulationParams, ...params },
+      simulationParams: deriveScaledSimParams(
+        s.simulationParams,
+        params,
+        s.simulationBaseline,
+      ),
     })),
+  setSimulationBaseline: (b) => set({ simulationBaseline: b }),
   setSimulationResults: (results) =>
     set((s) => ({
       simulationResults: { ...s.simulationResults, ...results },

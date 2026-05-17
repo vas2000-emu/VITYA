@@ -1,15 +1,3 @@
-// Feature types
-export type FeatureType = 'origin' | 'sketch' | 'extrude' | 'revolve' | 'fillet' | 'chamfer' | 'hole' | 'plane'
-
-export interface Feature {
-  id: string
-  name: string
-  type: FeatureType
-  children?: Feature[]
-  visible?: boolean
-  suppressed?: boolean
-}
-
 // Operation types for AI suggestions
 export type OperationType = 'modify' | 'add' | 'delete'
 
@@ -43,24 +31,12 @@ export interface Parameter {
   constraint?: string
 }
 
-// Manufacturing issue types
-export type IssueType = 'error' | 'warning' | 'success' | 'info'
-
-export interface ManufacturingIssue {
-  id: string
-  type: IssueType
-  category: string
-  title: string
-  description: string
-  location?: string
-  suggestion?: string
-}
-
 // Panel types
 export type RightPanelType = 'ai' | 'manufacturing'
 
 // Chat
 export interface ChatMessage {
+  id: string
   role: 'user' | 'assistant'
   content: string
 }
@@ -79,6 +55,16 @@ export interface MoldIssueHotspot {
   label: string
 }
 
+/**
+ * Axis-aligned bounding box in viewport world coordinates. Triangles
+ * whose centroid falls inside this box are painted with the issue's
+ * severity color by the 3D viewport's heatmap renderer.
+ */
+export interface MoldIssueRegion {
+  min: [number, number, number]
+  max: [number, number, number]
+}
+
 export interface MoldIssue {
   id: string
   title: string
@@ -92,6 +78,9 @@ export interface MoldIssue {
   beforeScore: number
   afterScore: number
   hotspot: MoldIssueHotspot
+  /** Region of the 3D mesh to highlight in the heatmap. Optional —
+   *  issues without a region show only the SVG hotspot. */
+  region?: MoldIssueRegion
 }
 
 export interface MoldRiskMetric {
@@ -114,8 +103,12 @@ export interface MoldChecklistItem {
   status: MoldChecklistStatus
 }
 
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
+
 export interface MoldAnalysisResult {
+  partId: PartId
   partName: string
+  partSummary: string
   overallScore: number
   improvedScore: number
   riskSummary: MoldRiskMetric[]

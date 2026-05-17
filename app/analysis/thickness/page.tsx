@@ -8,7 +8,18 @@ import {
   StatBlock,
 } from '@/components/analysis/AnalysisPageLayout'
 import { useAppStore } from '@/store/useAppStore'
-import moldSimApi, { type CoolingResponse, type FillingResponse } from '@/lib/moldsim-api'
+import {
+  calculateCooling,
+  calculateFilling,
+  type CoolingResponse,
+  type FillingResponse,
+} from '@/lib/moldsim-api'
+
+// Engine returns flow_ratio = flowLength / maxFlowLength (dimensionless,
+// ~0–1+). It marks the part is_fillable when ratio < 0.8 (SAFETY_FACTOR in
+// lib/moldsim/filling.ts). Anything above 1 means the cavity physically
+// can't fill from a single gate with the material's flow capability.
+const FILL_SAFETY_THRESHOLD = 0.8
 
 export default function ThicknessAnalysisPage() {
   const { simulationParams, setSimulationResults } = useAppStore()
@@ -21,28 +32,24 @@ export default function ThicknessAnalysisPage() {
     async function fetchAnalysisData() {
       setIsLoading(true)
       setError(null)
-      
+
       try {
         const [cooling, filling] = await Promise.all([
-          moldSimApi.analyzeCooling({
-            wall_thickness_mm: simulationParams.wallThickness,
-            melt_temp_c: simulationParams.meltTemp,
-            mold_temp_c: simulationParams.moldTemp,
-            part_volume_cm3: simulationParams.partVolume,
+          calculateCooling({
+            wall_thickness: simulationParams.wallThickness,
+            melt_temp: simulationParams.meltTemp,
+            mold_temp: simulationParams.moldTemp,
             material: simulationParams.material,
-            injection_speed: 'medium',
           }),
-          moldSimApi.analyzeFilling({
-            part_length_mm: simulationParams.partLength,
-            wall_thickness_mm: simulationParams.wallThickness,
-            part_width_mm: simulationParams.partWidth,
-            injection_pressure_mpa: 80,
-            melt_temp_c: simulationParams.meltTemp,
-            mold_temp_c: simulationParams.moldTemp,
+          calculateFilling({
+            flow_length: Math.max(simulationParams.partLength, simulationParams.partWidth),
+            wall_thickness: simulationParams.wallThickness,
+            melt_temp: simulationParams.meltTemp,
+            mold_temp: simulationParams.moldTemp,
             material: simulationParams.material,
           }),
         ])
-        
+
         setCoolingData(cooling)
         setFillingData(filling)
         setSimulationResults({ cooling, filling })
@@ -54,11 +61,11 @@ export default function ThicknessAnalysisPage() {
         setIsLoading(false)
       }
     }
-    
+
     fetchAnalysisData()
   }, [simulationParams, setSimulationResults])
 
-  if (isLoading) {
+  if (isLoading && (!coolingData || !fillingData)) {
     return (
       <AnalysisPageLayout
         title="Thickness Analysis"
@@ -92,16 +99,22 @@ export default function ThicknessAnalysisPage() {
   }
 
   const hasThicknessIssues = simulationParams.wallThickness < 1.0 || simulationParams.wallThickness > 5.0
-  const hasFlowIssues = fillingData.issues.length > 0
-  const hasTempWarnings = coolingData.warnings.length > 0
+  const hasFlowIssues = !fillingData.is_fillable || fillingData.flow_ratio > FILL_SAFETY_THRESHOLD
+  const hasCoolingRecs = coolingData.recommendations.length > 0
+  const flowUtilizationPct = fillingData.flow_ratio * 100
 
-  // Determine overall status
-  const getOverallStatus = () => {
-    if (hasThicknessIssues || hasFlowIssues) return { status: 'warning', tone: 'warn' as const }
-    if (hasTempWarnings) return { status: 'attention', tone: 'warn' as const }
-    return { status: 'good', tone: 'good' as const }
-  }
-  const overallStatus = getOverallStatus()
+  let overallStatus: { label: string; tone: 'good' | 'warn' | 'bad' }
+  if (hasThicknessIssues || hasFlowIssues) overallStatus = { label: 'Warning', tone: 'warn' }
+  else if (hasCoolingRecs) overallStatus = { label: 'Attention', tone: 'warn' }
+  else overallStatus = { label: 'Good', tone: 'good' }
+
+  // Mirror the breakdown used inside lib/moldsim/cooling.ts so the
+  // numbers shown here reconcile with the engine's cycle_time exactly.
+  // (cooling.ts: fill 2.0s, pack = cooling*0.3, openClose 3.0s, eject 1.5s.)
+  const fillTime = 2.0
+  const packTime = coolingData.cooling_time * 0.3
+  const coolingPortion = coolingData.cooling_time
+  const cyclesPerHour = coolingData.cycle_time > 0 ? 3600 / coolingData.cycle_time : 0
 
   return (
     <AnalysisPageLayout
@@ -109,6 +122,7 @@ export default function ThicknessAnalysisPage() {
       subtitle="Analyze wall thickness impact on fill behavior, cooling time, and cycle time. Wall thickness should usually stay between 2.0 mm and 3.5 mm for most materials."
       icon={Layers3}
       accent="sky"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock
@@ -119,20 +133,16 @@ export default function ThicknessAnalysisPage() {
         />
         <StatBlock
           label="Cooling time"
-          value={`${coolingData.cooling_time_s.toFixed(1)}s`}
+          value={`${coolingData.cooling_time.toFixed(1)}s`}
           hint="Time for center to reach ejection temp"
         />
         <StatBlock
-          label="Flow ratio"
-          value={`${fillingData.flow_length_ratio.toFixed(0)}:1`}
-          hint={`Max recommended: ${fillingData.max_recommended_ratio}:1`}
-          tone={fillingData.flow_length_ratio > fillingData.max_recommended_ratio ? 'bad' : undefined}
+          label="Flow utilization"
+          value={`${flowUtilizationPct.toFixed(0)}%`}
+          hint={`Safe-fill threshold: ${(FILL_SAFETY_THRESHOLD * 100).toFixed(0)}%`}
+          tone={hasFlowIssues ? 'bad' : undefined}
         />
-        <StatBlock
-          label="Status"
-          value={overallStatus.status.charAt(0).toUpperCase() + overallStatus.status.slice(1)}
-          tone={overallStatus.tone}
-        />
+        <StatBlock label="Status" value={overallStatus.label} tone={overallStatus.tone} />
       </div>
 
       <Section
@@ -146,27 +156,21 @@ export default function ThicknessAnalysisPage() {
                 <Clock className="size-3" />
                 Fill time
               </div>
-              <div className="text-lg font-medium text-zinc-100">
-                {coolingData.cycle_time_breakdown.fill_time_s.toFixed(2)}s
-              </div>
+              <div className="text-lg font-medium text-zinc-100">{fillTime.toFixed(2)}s</div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="flex items-center gap-2 text-xs text-zinc-500 mb-1">
                 <Clock className="size-3" />
                 Packing time
               </div>
-              <div className="text-lg font-medium text-zinc-100">
-                {coolingData.cycle_time_breakdown.packing_time_s.toFixed(1)}s
-              </div>
+              <div className="text-lg font-medium text-zinc-100">{packTime.toFixed(1)}s</div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="flex items-center gap-2 text-xs text-zinc-500 mb-1">
                 <ThermometerSun className="size-3" />
                 Cooling time
               </div>
-              <div className="text-lg font-medium text-zinc-100">
-                {coolingData.cycle_time_breakdown.cooling_time_s.toFixed(1)}s
-              </div>
+              <div className="text-lg font-medium text-zinc-100">{coolingPortion.toFixed(1)}s</div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50 border border-sky-500/30">
               <div className="flex items-center gap-2 text-xs text-sky-400 mb-1">
@@ -174,13 +178,14 @@ export default function ThicknessAnalysisPage() {
                 Total cycle
               </div>
               <div className="text-lg font-medium text-sky-300">
-                {coolingData.cycle_time_breakdown.total_cycle_time_s.toFixed(1)}s
+                {coolingData.cycle_time.toFixed(1)}s
               </div>
             </div>
           </div>
 
           <div className="text-sm text-zinc-400">
-            <span className="text-zinc-200">{coolingData.cycle_time_breakdown.cycles_per_hour.toFixed(0)}</span> cycles/hour achievable with current parameters
+            <span className="text-zinc-200">{cyclesPerHour.toFixed(0)}</span> cycles/hour
+            achievable with current parameters
           </div>
         </div>
       </Section>
@@ -194,29 +199,29 @@ export default function ThicknessAnalysisPage() {
             <div className="p-3 rounded-lg bg-zinc-800/50">
               <div className="text-xs text-zinc-500 mb-1">Estimated fill time</div>
               <div className="text-lg font-medium text-zinc-100">
-                {(fillingData.fill_time_s * 1000).toFixed(0)} ms
+                {(fillingData.estimated_fill_time * 1000).toFixed(0)} ms
               </div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-xs text-zinc-500 mb-1">Pressure drop</div>
+              <div className="text-xs text-zinc-500 mb-1">Recommended pressure</div>
               <div className="text-lg font-medium text-zinc-100">
-                {fillingData.estimated_pressure_drop_mpa.toFixed(1)} MPa
+                {fillingData.recommended_pressure.toFixed(1)} MPa
               </div>
             </div>
             <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-xs text-zinc-500 mb-1">Viscosity at conditions</div>
+              <div className="text-xs text-zinc-500 mb-1">Average viscosity</div>
               <div className="text-lg font-medium text-zinc-100">
-                {fillingData.viscosity_at_conditions_pa_s.toFixed(0)} Pa·s
+                {fillingData.average_viscosity.toFixed(0)} Pa·s
               </div>
             </div>
           </div>
 
-          {fillingData.gate_recommendations.length > 0 && (
+          {fillingData.recommendations.length > 0 && (
             <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/30">
-              <div className="text-xs text-sky-400 mb-2">Gate recommendations</div>
+              <div className="text-xs text-sky-400 mb-2">Flow recommendations</div>
               <ul className="text-sm text-zinc-300 space-y-1">
-                {fillingData.gate_recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2">
+                {fillingData.recommendations.map((rec) => (
+                  <li key={rec} className="flex items-start gap-2">
                     <span className="text-sky-400 mt-0.5">•</span>
                     {rec}
                   </li>
@@ -227,25 +232,29 @@ export default function ThicknessAnalysisPage() {
         </div>
       </Section>
 
-      {(hasFlowIssues || hasTempWarnings) && (
-        <Section
-          title="Issues detected"
-          description="Problems that may affect part quality"
-        >
+      {(hasFlowIssues || hasCoolingRecs) && (
+        <Section title="Issues detected" description="Problems that may affect part quality">
           <ul className="space-y-2">
-            {fillingData.issues.map((issue, i) => (
-              <li key={i} className="flex items-start gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
+            {hasFlowIssues && (
+              <li className="flex items-start gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
                 <AlertTriangle className="size-5 text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-sm font-medium text-rose-300">{issue.type}</div>
-                  <div className="text-sm text-zinc-400">{issue.message}</div>
+                  <div className="text-sm font-medium text-rose-300">Flow length near material limit</div>
+                  <div className="text-sm text-zinc-400">
+                    Flow utilization at {flowUtilizationPct.toFixed(0)}% exceeds the{' '}
+                    {(FILL_SAFETY_THRESHOLD * 100).toFixed(0)}% safe-fill threshold for{' '}
+                    {coolingData.material}. Add a second gate or thicken walls.
+                  </div>
                 </div>
               </li>
-            ))}
-            {coolingData.warnings.map((warning, i) => (
-              <li key={`warn-${i}`} className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            )}
+            {coolingData.recommendations.map((rec) => (
+              <li
+                key={rec}
+                className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30"
+              >
                 <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-sm text-zinc-300">{warning}</div>
+                <div className="text-sm text-zinc-300">{rec}</div>
               </li>
             ))}
           </ul>
@@ -258,15 +267,12 @@ export default function ThicknessAnalysisPage() {
       >
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           {[
-            ['Melt temperature range', `${coolingData.recommended_parameters.melt_temperature_range_c[0]}°C - ${coolingData.recommended_parameters.melt_temperature_range_c[1]}°C`],
-            ['Mold temperature range', `${coolingData.recommended_parameters.mold_temperature_range_c[0]}°C - ${coolingData.recommended_parameters.mold_temperature_range_c[1]}°C`],
-            ['Ejection temperature', `${coolingData.recommended_parameters.ejection_temperature_c}°C`],
-            ['Thermal conductivity', `${coolingData.recommended_parameters.thermal_conductivity_w_mk} W/(m·K)`],
+            ['Melt temperature', `${coolingData.melt_temp.toFixed(0)} °C`],
+            ['Mold temperature', `${coolingData.mold_temp.toFixed(0)} °C`],
+            ['Ejection temperature', `${coolingData.ejection_temp.toFixed(0)} °C`],
+            ['Thermal diffusivity', `${coolingData.thermal_diffusivity.toExponential(2)} m²/s`],
           ].map(([label, value]) => (
-            <div
-              key={label}
-              className="flex items-center justify-between border-b border-zinc-800 pb-2"
-            >
+            <div key={label} className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <dt className="text-zinc-500">{label}</dt>
               <dd className="text-zinc-200">{value}</dd>
             </div>
@@ -274,13 +280,14 @@ export default function ThicknessAnalysisPage() {
         </dl>
       </Section>
 
-      {!hasFlowIssues && !hasTempWarnings && (
+      {!hasFlowIssues && !hasCoolingRecs && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
           <CheckCircle2 className="size-6 text-emerald-400" />
           <div>
             <div className="font-medium text-emerald-300">Wall thickness analysis passed</div>
             <div className="text-sm text-zinc-400">
-              Current wall thickness of {simulationParams.wallThickness}mm is within recommended range for {coolingData.material}.
+              Current wall thickness of {simulationParams.wallThickness}mm is within recommended
+              range for {coolingData.material}.
             </div>
           </div>
         </div>

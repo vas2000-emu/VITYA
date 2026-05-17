@@ -1,63 +1,46 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
   Box,
-  Circle,
-  CircleDot,
   ClipboardCheck,
   DollarSign,
   Factory,
   FileText,
-  GitCompare,
+  FolderOpen,
   Layers3,
-  Locate,
   LogOut,
-  Pencil,
   Search,
   Settings2,
   Sparkles,
-  Square,
   Triangle,
-  Wrench,
+  Upload,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
-import type { Feature, FeatureType } from '@/lib/types'
+import { partsLibrary } from '@/lib/mockMoldAnalysis'
+import type { PartId } from '@/lib/types'
 
-type Tab = 'Features' | 'Sketch' | 'Evaluate' | 'Markup'
-const TABS: Tab[] = ['Features', 'Sketch', 'Evaluate', 'Markup']
-
-const FEATURE_ICONS: Record<FeatureType, LucideIcon> = {
-  origin: Locate,
-  sketch: Pencil,
-  extrude: Box,
-  revolve: Circle,
-  fillet: Wrench,
-  chamfer: Triangle,
-  hole: CircleDot,
-  plane: Square,
-}
-
-function flattenFeatures(features: Feature[]): Feature[] {
-  return features.flatMap((f) => [f, ...(f.children ?? [])])
-}
+type Tab = 'Part' | 'Evaluate' | 'AI Suggestions'
+const TABS: Tab[] = ['Part', 'Evaluate', 'AI Suggestions']
 
 export function Toolbar() {
-  const [activeTab, setActiveTab] = useState<Tab>('Features')
+  const [activeTab, setActiveTab] = useState<Tab>('Part')
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const {
-    features,
-    selectedFeature,
-    selectFeature,
     aiSuggestions,
     previewSuggestion,
-    setShowDiff,
     showManufacturing,
     setShowManufacturing,
     setRightPanel,
     logout,
+    currentPartId,
+    setCurrentPartId,
+    setUploadedSTL,
+    uploadedSTL,
   } = useAppStore()
 
   const handleToggleManufacturing = () => {
@@ -66,6 +49,24 @@ export function Toolbar() {
     if (newState) {
       setRightPanel('manufacturing')
     }
+  }
+
+  const handleUploadClick = () => fileInputRef.current?.click()
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.stl')) {
+      toast.error('Only .stl files are supported right now.')
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setUploadedSTL(url)
+    toast.success(`Loaded ${file.name}`, { description: 'DFM heatmap regenerated.' })
+    e.target.value = ''
+  }
+  const handleClearUpload = () => {
+    setUploadedSTL(null)
+    toast('Reverted to demo part', { description: partsLibrary[currentPartId as PartId]?.partName ?? '' })
   }
 
   return (
@@ -106,22 +107,21 @@ export function Toolbar() {
 
       {/* Ribbon row — content driven by the active tab. */}
       <div className="flex items-stretch border-t border-zinc-800 bg-zinc-950/40 min-h-[88px]">
-        {activeTab === 'Features' && (
-          <FeaturesRibbon
-            features={flattenFeatures(features)}
-            selectedFeature={selectedFeature}
-            onSelect={selectFeature}
-          />
-        )}
-        {activeTab === 'Sketch' && (
-          <SketchRibbon
-            sketches={features.filter((f) => f.type === 'sketch')}
-            selectedFeature={selectedFeature}
-            onSelect={selectFeature}
+        {activeTab === 'Part' && (
+          <PartRibbon
+            currentPartId={currentPartId as PartId}
+            uploadedSTL={uploadedSTL}
+            onSelectPart={(id) => {
+              setUploadedSTL(null)
+              setCurrentPartId(id)
+              toast(partsLibrary[id]?.partName ?? id, { description: 'Loaded from part library.' })
+            }}
+            onUploadClick={handleUploadClick}
+            onClearUpload={handleClearUpload}
           />
         )}
         {activeTab === 'Evaluate' && <EvaluateRibbon />}
-        {activeTab === 'Markup' && (
+        {activeTab === 'AI Suggestions' && (
           <MarkupRibbon
             suggestions={aiSuggestions}
             onPreview={(id) => {
@@ -133,11 +133,6 @@ export function Toolbar() {
 
         {/* Persistent global actions — rendered as the rightmost ribbon group */}
         <RibbonGroup bordered>
-          <RibbonButton
-            onClick={() => setShowDiff(true)}
-            icon={GitCompare}
-            label="Diff"
-          />
           <RibbonButton
             onClick={handleToggleManufacturing}
             icon={AlertTriangle}
@@ -151,6 +146,14 @@ export function Toolbar() {
             label="Sign out"
           />
         </RibbonGroup>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".stl"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </header>
   )
@@ -160,57 +163,52 @@ export function Toolbar() {
 // Ribbon variants
 // ---------------------------------------------------------------------------
 
-function FeaturesRibbon({
-  features,
-  selectedFeature,
-  onSelect,
+// "Part" tab — drives which geometry is loaded into the viewport. The
+// part-library swap-on-click is the same logic /results uses; lifting it
+// here is the Phase 1 fix for "Part Library should be in the top menu."
+function PartRibbon({
+  currentPartId,
+  uploadedSTL,
+  onSelectPart,
+  onUploadClick,
+  onClearUpload,
 }: {
-  features: Feature[]
-  selectedFeature: string | null
-  onSelect: (id: string | null) => void
+  currentPartId: PartId
+  uploadedSTL: string | null
+  onSelectPart: (id: PartId) => void
+  onUploadClick: () => void
+  onClearUpload: () => void
 }) {
+  const partIds = Object.keys(partsLibrary) as PartId[]
   return (
-    <RibbonGroup>
-      {features.map((f) => (
+    <>
+      <RibbonGroup bordered>
         <RibbonButton
-          key={f.id}
-          icon={FEATURE_ICONS[f.type]}
-          label={f.name}
-          active={selectedFeature === f.id}
-          onClick={() => onSelect(f.id)}
+          onClick={onUploadClick}
+          icon={Upload}
+          label="Upload STL"
+          active={!!uploadedSTL}
         />
-      ))}
-    </RibbonGroup>
-  )
-}
-
-function SketchRibbon({
-  sketches,
-  selectedFeature,
-  onSelect,
-}: {
-  sketches: Feature[]
-  selectedFeature: string | null
-  onSelect: (id: string | null) => void
-}) {
-  return (
-    <RibbonGroup>
-      {sketches.length === 0 ? (
-        <span className="text-xs text-zinc-500 px-3 py-3 self-center">
-          No sketches in this part
-        </span>
-      ) : (
-        sketches.map((s) => (
+        {uploadedSTL && (
           <RibbonButton
-            key={s.id}
-            icon={Pencil}
-            label={s.name}
-            active={selectedFeature === s.id}
-            onClick={() => onSelect(s.id)}
+            onClick={onClearUpload}
+            icon={Box}
+            label="Use Demo Part"
           />
-        ))
-      )}
-    </RibbonGroup>
+        )}
+      </RibbonGroup>
+      <RibbonGroup>
+        {partIds.map((id) => (
+          <RibbonButton
+            key={id}
+            icon={FolderOpen}
+            label={partsLibrary[id]?.partName ?? id}
+            active={!uploadedSTL && currentPartId === id}
+            onClick={() => onSelectPart(id)}
+          />
+        ))}
+      </RibbonGroup>
+    </>
   )
 }
 
@@ -259,7 +257,7 @@ function EvaluateRibbon() {
         <RibbonLink
           href="/analysis/on-demand"
           icon={Factory}
-          label="On Demand Manufacturing"
+          label="Local Manufacturing"
         />
         <RibbonLink href="/results" icon={ClipboardCheck} label="Part Reviewer" />
       </RibbonGroup>

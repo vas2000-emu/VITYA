@@ -148,7 +148,7 @@ export default function CostingPage() {
     fetchCostData()
   }, [simulationParams, setSimulationResults])
 
-  if (isLoading) {
+  if (isLoading && !costData) {
     return (
       <AnalysisPageLayout
         title="Costing"
@@ -191,6 +191,7 @@ export default function CostingPage() {
       subtitle="Estimated tooling and per-part cost for this geometry, based on Michigan injection-molding norms and MoldSim physics models."
       icon={DollarSign}
       accent="emerald"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <StatBlock

@@ -8,7 +8,16 @@ import {
   StatBlock,
 } from '@/components/analysis/AnalysisPageLayout'
 import { useAppStore } from '@/store/useAppStore'
-import moldSimApi, { type ManufacturingCheckResponse, type CostResponse } from '@/lib/moldsim-api'
+import {
+  checkManufacturing,
+  calculateCost,
+  type ManufacturingCheckResponse,
+  type CostResponse,
+} from '@/lib/moldsim-api'
+
+// ~$3,500 of tooling per undercut is the conventional rule of thumb for
+// adding a side-action; the real value is shop-dependent.
+const UNDERCUT_TOOLING_PER = 3500
 
 export default function UndercutAnalysisPage() {
   const { simulationParams, setSimulationResults } = useAppStore()
@@ -21,33 +30,35 @@ export default function UndercutAnalysisPage() {
     async function fetchData() {
       setIsLoading(true)
       setError(null)
-      
+
       try {
         const [dfm, cost] = await Promise.all([
-          moldSimApi.checkManufacturability({
-            wall_thickness_mm: simulationParams.wallThickness,
-            min_draft_angle_deg: simulationParams.minDraftAngle,
+          checkManufacturing({
+            wall_thickness: simulationParams.wallThickness,
+            min_draft_angle: simulationParams.minDraftAngle,
             num_undercuts: simulationParams.numUndercuts,
-            rib_thickness_ratio: 0.6,
             material: simulationParams.material,
             has_sharp_corners: simulationParams.hasSharpCorners,
             has_uniform_wall: simulationParams.hasUniformWall,
+            part_length: simulationParams.partLength,
+            part_width: simulationParams.partWidth,
+          part_height: simulationParams.partHeight,
           }),
-          moldSimApi.estimateCost({
-            part_volume_cm3: simulationParams.partVolume,
-            part_weight_g: simulationParams.partWeight,
-            projected_area_cm2: simulationParams.projectedArea,
-            wall_thickness_mm: simulationParams.wallThickness,
+          calculateCost({
+            part_volume: simulationParams.partVolume,
+            part_weight: simulationParams.partWeight,
+            projected_area: simulationParams.projectedArea,
+            wall_thickness: simulationParams.wallThickness,
             production_quantity: simulationParams.productionQuantity,
             material: simulationParams.material,
             complexity: simulationParams.complexity,
             num_cavities: simulationParams.numCavities,
             num_undercuts: simulationParams.numUndercuts,
-            melt_temp_c: simulationParams.meltTemp,
-            mold_temp_c: simulationParams.moldTemp,
+            melt_temp: simulationParams.meltTemp,
+            mold_temp: simulationParams.moldTemp,
           }),
         ])
-        
+
         setDfmData(dfm)
         setCostData(cost)
         setSimulationResults({ dfm, cost })
@@ -59,18 +70,23 @@ export default function UndercutAnalysisPage() {
         setIsLoading(false)
       }
     }
-    
+
     fetchData()
   }, [simulationParams, setSimulationResults])
 
-  // Filter for undercut-specific issues
-  const undercutIssues = dfmData?.issues.filter(i => i.type === 'undercuts') || []
-  const undercutWarnings = dfmData?.warnings.filter(w => w.type === 'undercuts') || []
+  // Undercut-related issues, matched on category/issue string since the
+  // real API doesn't tag them by a structured type.
+  const undercutIssues =
+    dfmData?.issues.filter((i) =>
+      /undercut|side action|lifter/i.test(`${i.category} ${i.issue}`),
+    ) ?? []
 
   const hasUndercuts = simulationParams.numUndercuts > 0
-  const undercutCost = costData?.tooling.undercut_cost || 0
+  // Estimated incremental tooling cost from undercuts. Real API doesn't
+  // break this out, so we derive it.
+  const undercutCost = hasUndercuts ? simulationParams.numUndercuts * UNDERCUT_TOOLING_PER : 0
 
-  if (isLoading) {
+  if (isLoading && !dfmData) {
     return (
       <AnalysisPageLayout
         title="Undercut Analysis"
@@ -103,13 +119,11 @@ export default function UndercutAnalysisPage() {
     )
   }
 
-  const getUndercutStatus = () => {
-    if (simulationParams.numUndercuts === 0) return { status: 'None', tone: 'good' as const }
-    if (simulationParams.numUndercuts > 4) return { status: 'Complex', tone: 'bad' as const }
-    if (simulationParams.numUndercuts > 2) return { status: 'Multiple', tone: 'warn' as const }
-    return { status: 'Present', tone: 'warn' as const }
-  }
-  const status = getUndercutStatus()
+  let status: { status: string; tone: 'good' | 'warn' | 'bad' }
+  if (simulationParams.numUndercuts === 0) status = { status: 'None', tone: 'good' }
+  else if (simulationParams.numUndercuts > 4) status = { status: 'Complex', tone: 'bad' }
+  else if (simulationParams.numUndercuts > 2) status = { status: 'Multiple', tone: 'warn' }
+  else status = { status: 'Present', tone: 'warn' }
 
   return (
     <AnalysisPageLayout
@@ -117,6 +131,7 @@ export default function UndercutAnalysisPage() {
       subtitle="Find geometry that would trap a single-pull mold and require side actions, lifters, or tooling complications that drive up cost and lead time."
       icon={Box}
       accent="rose"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock
@@ -128,20 +143,16 @@ export default function UndercutAnalysisPage() {
         <StatBlock
           label="Tooling impact"
           value={hasUndercuts ? `+$${undercutCost.toLocaleString()}` : '$0'}
-          hint="Cost of side actions"
+          hint="Estimated cost of side actions"
           tone={undercutCost > 5000 ? 'bad' : undercutCost > 0 ? 'warn' : 'good'}
         />
         <StatBlock
           label="DFM Score"
-          value={`${dfmData.dfm_score}/100`}
-          hint={dfmData.overall_assessment}
-          tone={dfmData.dfm_score < 50 ? 'bad' : dfmData.dfm_score < 70 ? 'warn' : 'good'}
+          value={`${dfmData.overall_score}/100`}
+          hint={dfmData.summary}
+          tone={dfmData.overall_score < 50 ? 'bad' : dfmData.overall_score < 70 ? 'warn' : 'good'}
         />
-        <StatBlock
-          label="Status"
-          value={status.status}
-          tone={status.tone}
-        />
+        <StatBlock label="Status" value={status.status} tone={status.tone} />
       </div>
 
       {hasUndercuts && (
@@ -155,18 +166,29 @@ export default function UndercutAnalysisPage() {
               <div>
                 <h4 className="font-medium text-rose-300">Cost impact</h4>
                 <p className="text-sm text-zinc-400 mt-1">
-                  Each undercut requires a side action mechanism adding approximately $3,000-5,000 to tooling costs. 
-                  Current estimate: <span className="text-rose-300 font-medium">${undercutCost.toLocaleString()}</span>
+                  Each undercut requires a side action mechanism adding approximately
+                  $3,000-5,000 to tooling costs. Current estimate:{' '}
+                  <span className="text-rose-300 font-medium">
+                    ${undercutCost.toLocaleString()}
+                  </span>
+                  {costData && (
+                    <>
+                      {' '}of <span className="text-rose-300 font-medium">
+                        ${costData.total_tooling_cost.toLocaleString()}
+                      </span>{' '}total tooling.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
-            
+
             <div className="flex gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
               <Clock className="size-6 text-amber-400 shrink-0" />
               <div>
                 <h4 className="font-medium text-amber-300">Lead time impact</h4>
                 <p className="text-sm text-zinc-400 mt-1">
-                  Side actions add 1-2 weeks to tool build time. More complex mechanisms may add additional time for testing and tuning.
+                  Side actions add 1-2 weeks to tool build time. More complex mechanisms may add
+                  additional time for testing and tuning.
                 </p>
               </div>
             </div>
@@ -174,27 +196,38 @@ export default function UndercutAnalysisPage() {
         </Section>
       )}
 
-      {(undercutIssues.length > 0 || undercutWarnings.length > 0) && (
+      {undercutIssues.length > 0 && (
         <Section
           title="Issues detected"
           description="Undercut-related manufacturing concerns"
         >
           <ul className="space-y-2">
-            {undercutIssues.map((issue, i) => (
-              <li key={i} className="flex items-start gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
-                <XCircle className="size-5 text-rose-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-rose-300 capitalize">{issue.severity}</div>
-                  <div className="text-sm text-zinc-300">{issue.message}</div>
-                </div>
-              </li>
-            ))}
-            {undercutWarnings.map((warning, i) => (
-              <li key={`warn-${i}`} className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-sm text-zinc-300">{warning.message}</div>
-              </li>
-            ))}
+            {undercutIssues.map((issue) => {
+              const isCritical = issue.severity === 'critical' || issue.severity === 'warning'
+              return (
+                <li
+                  key={`${issue.category}-${issue.issue}`}
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${
+                    isCritical
+                      ? 'bg-rose-500/10 border-rose-500/30'
+                      : 'bg-amber-500/10 border-amber-500/30'
+                  }`}
+                >
+                  {isCritical ? (
+                    <XCircle className="size-5 text-rose-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <div className="text-sm font-medium text-zinc-200 capitalize">
+                      {issue.category}
+                    </div>
+                    <div className="text-sm text-zinc-300">{issue.issue}</div>
+                    <div className="text-xs text-zinc-500 mt-1">{issue.recommendation}</div>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </Section>
       )}
@@ -209,15 +242,24 @@ export default function UndercutAnalysisPage() {
             <ul className="text-sm text-zinc-300 space-y-2">
               <li className="flex items-start gap-2">
                 <span className="text-emerald-400 mt-0.5">1.</span>
-                <span><strong>Redesign the feature</strong> - Can the undercut be converted to a snap-fit, living hinge, or pass-through hole?</span>
+                <span>
+                  <strong>Redesign the feature</strong> — can the undercut be converted to a
+                  snap-fit, living hinge, or pass-through hole?
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-emerald-400 mt-0.5">2.</span>
-                <span><strong>Change parting line</strong> - Moving the parting line may allow the feature to release in the pull direction.</span>
+                <span>
+                  <strong>Change parting line</strong> — moving the parting line may allow the
+                  feature to release in the pull direction.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-emerald-400 mt-0.5">3.</span>
-                <span><strong>Split the part</strong> - For complex undercuts, consider making two parts that snap or bond together.</span>
+                <span>
+                  <strong>Split the part</strong> — for complex undercuts, consider making two
+                  parts that snap or bond together.
+                </span>
               </li>
             </ul>
           </div>
@@ -227,19 +269,31 @@ export default function UndercutAnalysisPage() {
             <ul className="text-sm text-zinc-300 space-y-2">
               <li className="flex items-start gap-2">
                 <span className="text-sky-400 mt-0.5">•</span>
-                <span><strong>Side actions/slides</strong> - Mechanical cams that move laterally during ejection. Best for external undercuts.</span>
+                <span>
+                  <strong>Side actions/slides</strong> — mechanical cams that move laterally
+                  during ejection. Best for external undercuts.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-sky-400 mt-0.5">•</span>
-                <span><strong>Lifters</strong> - Angled pins that move in two directions simultaneously. Good for internal undercuts.</span>
+                <span>
+                  <strong>Lifters</strong> — angled pins that move in two directions
+                  simultaneously. Good for internal undercuts.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-sky-400 mt-0.5">•</span>
-                <span><strong>Collapsing cores</strong> - For internal threads or complex internal features. Most expensive option.</span>
+                <span>
+                  <strong>Collapsing cores</strong> — for internal threads or complex internal
+                  features. Most expensive option.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-sky-400 mt-0.5">•</span>
-                <span><strong>Bump-offs</strong> - For shallow, flexible undercuts that can flex over a mold feature. Material dependent.</span>
+                <span>
+                  <strong>Bump-offs</strong> — for shallow, flexible undercuts that can flex
+                  over a mold feature. Material dependent.
+                </span>
               </li>
             </ul>
           </div>
@@ -252,7 +306,8 @@ export default function UndercutAnalysisPage() {
           <div>
             <div className="font-medium text-emerald-300">No undercuts detected</div>
             <div className="text-sm text-zinc-400">
-              Part geometry allows for a simple straight-pull mold without side actions, reducing tooling cost and complexity.
+              Part geometry allows for a simple straight-pull mold without side actions,
+              reducing tooling cost and complexity.
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 interface AnalysisPageLayoutProps {
@@ -9,6 +9,10 @@ interface AnalysisPageLayoutProps {
   subtitle: string
   icon: LucideIcon
   accent: 'rose' | 'amber' | 'sky' | 'emerald' | 'violet'
+  /** When true, render a small "Updating..." indicator next to the
+   *  title without unmounting the children. Used by analysis pages to
+   *  avoid flashing a full-page spinner on every parameter change. */
+  isRefetching?: boolean
   children: React.ReactNode
 }
 
@@ -25,6 +29,7 @@ export function AnalysisPageLayout({
   subtitle,
   icon: Icon,
   accent,
+  isRefetching = false,
   children,
 }: AnalysisPageLayoutProps) {
   return (
@@ -72,7 +77,15 @@ export function AnalysisPageLayout({
               <Icon className="size-6" />
             </span>
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-zinc-100">{title}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-semibold text-zinc-100">{title}</h1>
+                {isRefetching && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
+                    <Loader2 className="size-3 animate-spin" />
+                    Updating
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-zinc-400 mt-1 max-w-2xl leading-relaxed">
                 {subtitle}
               </p>
