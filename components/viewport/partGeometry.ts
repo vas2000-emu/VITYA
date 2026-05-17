@@ -549,14 +549,18 @@ function evaluateCsgNode(node: CsgNode): THREE.BufferGeometry {
     }
     return geom
   }
-  const a = new Brush(evaluateCsgNode(node.a))
-  const b = new Brush(evaluateCsgNode(node.b))
+  const geomA = evaluateCsgNode(node.a)
+  const geomB = evaluateCsgNode(node.b)
+  const a = new Brush(geomA)
+  const b = new Brush(geomB)
   a.updateMatrixWorld()
   b.updateMatrixWorld()
   const result = csgEvaluator.evaluate(a, b, CSG_OPS[node.op])
-  // Detach the geometry from the temporary Brush so callers can dispose
-  // the brush wrappers freely.
-  return result.geometry.clone()
+  const out = result.geometry.clone()
+  geomA.dispose()
+  geomB.dispose()
+  result.geometry.dispose()
+  return out
 }
 
 export function buildCsgGeometry(root: CsgNode): THREE.BufferGeometry {
