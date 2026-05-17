@@ -84,6 +84,11 @@ interface PartContext {
   partId?: string
   partName?: string
   partSummary?: string
+  /** Current AI-part primitive shape, if the active part is one. Used
+   *  by the server to detect "resize the existing part" calls that
+   *  came in as create_part_from_description and rewrite them into a
+   *  propose_design_change so the Accept/Reject flow runs. */
+  currentShape?: string
   material?: string
   wallThickness?: number
   minDraftAngle?: number
@@ -115,6 +120,11 @@ function buildSystemPrompt(ctx: PartContext | undefined, intent?: 'chat' | 'sugg
   const identity: string[] = []
   if (ctx.partName) identity.push(`The designer is currently working on: ${ctx.partName}.`)
   if (ctx.partSummary) identity.push(ctx.partSummary)
+  if (ctx.currentShape) {
+    identity.push(
+      `The active part is an AI-generated ${ctx.currentShape}. Resize / wall / material requests for this part MUST go through propose_design_change — do NOT call create_part_from_description with shape="${ctx.currentShape}", that would replace the part and skip the Accept/Reject step.`,
+    )
+  }
   identity.push('Refer to this part by name when relevant instead of "the part".')
 
   const params: string[] = []
@@ -496,9 +506,10 @@ function shortCircuitFor(
   toolCalls: ToolCall[],
   rawContent: string | null,
   intent: 'chat' | 'suggestions' | undefined,
+  ctx: PartContext | undefined,
 ) {
   return (
-    maybeCustomPartResponse(toolCalls, rawContent) ??
+    maybeCustomPartResponse(toolCalls, rawContent, ctx) ??
     maybeProposalResponse(toolCalls, rawContent, intent)
   )
 }
@@ -506,8 +517,18 @@ function shortCircuitFor(
 /** If the model called create_part_from_description, short-circuit the
  *  loop and return the parsed spec to the client. Returns null when
  *  there's no such call (so the proposal short-circuit / shop tool loop
- *  can run instead). */
-function maybeCustomPartResponse(toolCalls: ToolCall[], rawContent: string | null) {
+ *  can run instead).
+ *
+ *  Special case: if the workspace already has an AI part of the same
+ *  primitive shape (ctx.currentShape matches the new spec.shape), the
+ *  user almost certainly meant "resize the current part" — the model
+ *  picked the wrong tool. Rewrite into a propose_design_change so the
+ *  Accept/Reject card appears instead of silently replacing the part. */
+function maybeCustomPartResponse(
+  toolCalls: ToolCall[],
+  rawContent: string | null,
+  ctx: PartContext | undefined,
+) {
   const partCall = toolCalls.find((c) => c.function.name === 'create_part_from_description')
   if (!partCall) return null
   const replyText = rawContent?.trim() ?? ''
@@ -517,10 +538,57 @@ function maybeCustomPartResponse(toolCalls: ToolCall[], rawContent: string | nul
       reply: replyText || '(part spec was malformed; please retry)',
     })
   }
+  if (ctx?.currentShape && ctx.currentShape === customPart.shape) {
+    const rewritten = rewriteCreateAsProposal(customPart, ctx, partCall.id)
+    if (rewritten) {
+      return NextResponse.json({
+        reply: replyText || `Proposed: ${rewritten.title}`,
+        proposal: rewritten,
+      })
+    }
+    // No actual dim/material/wall diff vs the current part — there's
+    // nothing to propose. Tell the user instead of silently replacing.
+    return NextResponse.json({
+      reply: replyText || `The current ${ctx.currentShape} already matches those parameters.`,
+    })
+  }
   return NextResponse.json({
     reply: replyText || `Created ${customPart.label}`,
     customPart,
   })
+}
+
+/** Build a DesignProposal from a shape-matching create_part_from_description
+ *  call. Diffs the new spec against the current context and includes only
+ *  fields that actually changed. Returns null if nothing differs. */
+function rewriteCreateAsProposal(
+  spec: CustomPartSpec,
+  ctx: PartContext,
+  idHint: string,
+): DesignProposal | null {
+  const changes: DesignChange[] = []
+  const numericPairs: Array<[DesignField, number, number | undefined]> = [
+    ['partLength', spec.partLength, ctx.partLength],
+    ['partWidth', spec.partWidth, ctx.partWidth],
+    ['partHeight', spec.partHeight, ctx.partHeight],
+    ['wallThickness', spec.wallThickness, ctx.wallThickness],
+  ]
+  for (const [field, next, current] of numericPairs) {
+    if (typeof next !== 'number' || !Number.isFinite(next)) continue
+    if (typeof current === 'number' && Math.abs(next - current) < 1e-6) continue
+    changes.push({ field, value: next })
+  }
+  if (spec.material && spec.material !== ctx.material) {
+    changes.push({ field: 'material', value: spec.material })
+  }
+  if (changes.length === 0) return null
+  return {
+    id: idHint,
+    title: `Update ${ctx.partName ?? ctx.currentShape ?? 'part'}`,
+    rationale: spec.description?.slice(0, 400) ?? `Apply ${changes.length} change${changes.length === 1 ? '' : 's'} to the current part.`,
+    changes,
+    status: 'pending',
+  }
 }
 
 /** If any of the model's tool calls is a propose_design_change, build
@@ -664,7 +732,7 @@ export async function POST(req: NextRequest) {
       // If the model proposed a design change, short-circuit the
       // tool-loop and return the proposal alongside any text the model
       // produced. The user's accept/reject is the next step.
-      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null, body.intent)
+      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null, body.intent, body.context)
       if (shortCircuit) return shortCircuit
 
       // Push the assistant's tool-call message before the tool outputs.

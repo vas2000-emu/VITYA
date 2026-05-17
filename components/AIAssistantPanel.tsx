@@ -253,6 +253,7 @@ export function AIAssistantPanel() {
     setCurrentPartId,
     uploadedSTL,
     setUploadedSTL,
+    customPartSpec,
     setCustomPartSpec,
     addUserPart,
     setAiPartSuggestions,
@@ -449,6 +450,10 @@ export function AIAssistantPanel() {
             partId: currentPartId,
             partName,
             partSummary,
+            // Current AI-part primitive shape (if any). Lets the server
+            // detect "resize the existing donut" calls that should be
+            // proposals, not new-part creations.
+            currentShape: customPartSpec?.shape,
             material: simulationParams.material,
             wallThickness: simulationParams.wallThickness,
             minDraftAngle: simulationParams.minDraftAngle,
