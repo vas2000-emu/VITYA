@@ -507,10 +507,30 @@ function shortCircuitFor(
   rawContent: string | null,
   intent: 'chat' | 'suggestions' | undefined,
   ctx: PartContext | undefined,
+  latestUserMessage: string | undefined,
 ) {
   return (
-    maybeCustomPartResponse(toolCalls, rawContent, ctx) ??
+    maybeCustomPartResponse(toolCalls, rawContent, ctx, latestUserMessage) ??
     maybeProposalResponse(toolCalls, rawContent, intent)
+  )
+}
+
+/** Heuristic: does the latest user message read like the designer
+ *  wants a brand-new part (vs. modifying the current one)?
+ *  Used to bypass the shape-match guard in maybeCustomPartResponse so
+ *  prompts like "create another donut" or "make an imperfect torus"
+ *  still produce a new part even though the shape matches what's
+ *  already loaded. */
+function isCreationIntent(text: string | undefined): boolean {
+  if (!text) return false
+  const t = text.toLowerCase()
+  // Word-boundary regex so "recreate" doesn't trip on "create" by
+  // substring while "make me a", "generate", "build a", "new one",
+  // "another donut" all match. Tuned conservatively — false negatives
+  // here just mean a proposal card instead of a new part, which is
+  // strictly safer than the inverse.
+  return /\b(create|make(?:\s+(?:me|a|an))?|generate|build|spawn|new\s+(?:one|part|object|donut|cylinder|ring|hex|sphere|cone|dome|plate|shell|torus|box)|another|fresh|imperfect|with\s+imperfections|with\s+issues|with\s+flaws|with\s+defects|broken|bad)\b/i.test(
+    t,
   )
 }
 
@@ -528,6 +548,7 @@ function maybeCustomPartResponse(
   toolCalls: ToolCall[],
   rawContent: string | null,
   ctx: PartContext | undefined,
+  latestUserMessage: string | undefined,
 ) {
   const partCall = toolCalls.find((c) => c.function.name === 'create_part_from_description')
   if (!partCall) return null
@@ -538,7 +559,13 @@ function maybeCustomPartResponse(
       reply: replyText || '(part spec was malformed; please retry)',
     })
   }
-  if (ctx?.currentShape && ctx.currentShape === customPart.shape) {
+  // Shape-match guard: rewrite "create torus" calls into proposals
+  // when there's already a torus loaded, UNLESS the user clearly asked
+  // for a new part ("create / make / generate / another / imperfect ...").
+  // Without the creation-intent escape, prompts like "make an imperfect
+  // donut" get short-circuited into a no-op proposal.
+  const looksLikeNewPartRequest = isCreationIntent(latestUserMessage)
+  if (ctx?.currentShape && ctx.currentShape === customPart.shape && !looksLikeNewPartRequest) {
     const rewritten = rewriteCreateAsProposal(customPart, ctx, partCall.id)
     if (rewritten) {
       return NextResponse.json({
@@ -546,11 +573,8 @@ function maybeCustomPartResponse(
         proposal: rewritten,
       })
     }
-    // No actual dim/material/wall diff vs the current part — there's
-    // nothing to propose. Tell the user instead of silently replacing.
-    return NextResponse.json({
-      reply: replyText || `The current ${ctx.currentShape} already matches those parameters.`,
-    })
+    // Same shape, no diff, no creation verb — let the create proceed
+    // so the model has a clean retry; the duplicate part is harmless.
   }
   return NextResponse.json({
     reply: replyText || `Created ${customPart.label}`,
@@ -702,6 +726,12 @@ export async function POST(req: NextRequest) {
     ...body.messages,
   ]
 
+  // Latest user-authored message — used by the shape-match guard in
+  // maybeCustomPartResponse to detect creation intent ("create / make
+  // / generate / another / imperfect ...") and skip rewriting a create
+  // call into a proposal in those cases.
+  const latestUserMessage = [...body.messages].reverse().find((m) => m.role === 'user')?.content
+
   try {
     // Up to 3 round-trips to handle tool calls. Anything beyond that is
     // either a tool-loop bug or the model getting confused — bail out
@@ -732,7 +762,7 @@ export async function POST(req: NextRequest) {
       // If the model proposed a design change, short-circuit the
       // tool-loop and return the proposal alongside any text the model
       // produced. The user's accept/reject is the next step.
-      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null, body.intent, body.context)
+      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null, body.intent, body.context, latestUserMessage)
       if (shortCircuit) return shortCircuit
 
       // Push the assistant's tool-call message before the tool outputs.
