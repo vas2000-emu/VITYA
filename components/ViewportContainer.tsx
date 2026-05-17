@@ -6,6 +6,7 @@ import { Scene } from './viewport/Scene'
 import { STLDropzone } from './viewport/STLDropzone'
 import { ViewportToolbar } from './viewport/ViewportToolbar'
 import { SimulationStatusHud } from './viewport/SimulationStatusHud'
+import { UploadAnalyzeModal } from './viewport/UploadAnalyzeModal'
 
 const PART_NAMES: Record<string, string> = {
   bracket: 'Plastic Bracket — bracket.stl',
@@ -36,6 +37,7 @@ export function ViewportContainer() {
         </Suspense>
       </STLDropzone>
       <SimulationStatusHud />
+      <UploadAnalyzeModal />
     </div>
   )
 }

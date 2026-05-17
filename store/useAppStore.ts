@@ -190,6 +190,22 @@ interface AppState {
   partBounds: [number, number, number, number, number, number] | null
   setPartBounds: (b: [number, number, number, number, number, number] | null) => void
 
+  // Bounding box of the most recently uploaded STL, in its ORIGINAL
+  // file units (not the viewport-rescaled size). Published by Part.tsx
+  // before the STL geometry is auto-scaled to fit the camera; consumed
+  // by UploadAnalyzeModal to pre-fill L/W/H without distortion.
+  // Tuple = [sizeX, sizeY, sizeZ]; null when no STL is loaded.
+  uploadedSTLBbox: [number, number, number] | null
+  setUploadedSTLBbox: (b: [number, number, number] | null) => void
+
+  // Flag flipped to true when an STL load completes; UploadAnalyzeModal
+  // watches this and opens. Reset to false once the modal is dismissed
+  // or submitted. Decouples "STL finished loading" from "modal should
+  // be open" so the modal can be reopened later via a button without
+  // re-uploading.
+  pendingUploadAnalysis: boolean
+  setPendingUploadAnalysis: (pending: boolean) => void
+
   // Simulation state (moldsim backend)
   simulationParams: SimulationParams
   simulationBaseline: SimulationBaseline
@@ -390,6 +406,11 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentPartId: (id) => set({ currentPartId: id }),
   partBounds: null,
   setPartBounds: (b) => set({ partBounds: b }),
+
+  uploadedSTLBbox: null,
+  setUploadedSTLBbox: (b) => set({ uploadedSTLBbox: b }),
+  pendingUploadAnalysis: false,
+  setPendingUploadAnalysis: (pending) => set({ pendingUploadAnalysis: pending }),
 
   // Simulation state (moldsim backend). Defaults match the bumper hero
   // demo case — keep these in sync with lib/partSimInputs.ts.bumper so

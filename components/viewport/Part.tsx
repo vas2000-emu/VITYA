@@ -36,6 +36,8 @@ export function Part() {
   const showManufacturing = useAppStore((s) => s.showManufacturing)
   const moldMode = useAppStore((s) => s.viewportMoldMode)
   const setPartBounds = useAppStore((s) => s.setPartBounds)
+  const setUploadedSTLBbox = useAppStore((s) => s.setUploadedSTLBbox)
+  const setPendingUploadAnalysis = useAppStore((s) => s.setPendingUploadAnalysis)
 
   const fixedIssueIds = useResultsStore((s) => s.fixedIssueIds)
   const pendingFixId = useResultsStore((s) => s.pendingFixId)
@@ -63,6 +65,7 @@ export function Part() {
   useEffect(() => {
     if (!uploadedSTL) {
       setUploadedGeom(null)
+      setUploadedSTLBbox(null)
       return
     }
     const loader = new STLLoader()
@@ -73,12 +76,18 @@ export function Part() {
       nonIndexed.computeBoundingBox()
       const size = new THREE.Vector3()
       nonIndexed.boundingBox!.getSize(size)
+      // Publish the ORIGINAL STL bbox so UploadAnalyzeModal can pre-fill
+      // L/W/H without distortion. The user picks the unit (mm vs in) in
+      // the modal — STL files don't carry units, so we surface the raw
+      // numbers and let them decide.
+      setUploadedSTLBbox([size.x, size.y, size.z])
+      setPendingUploadAnalysis(true)
       const maxDim = Math.max(size.x, size.y, size.z)
       const targetMax = 160
       if (maxDim > 0) nonIndexed.scale(targetMax / maxDim, targetMax / maxDim, targetMax / maxDim)
       setUploadedGeom(nonIndexed)
     })
-  }, [uploadedSTL])
+  }, [uploadedSTL, setUploadedSTLBbox, setPendingUploadAnalysis])
 
   const geometry = uploadedGeom ?? proceduralGeom
 
