@@ -211,7 +211,12 @@ export type CsgNode = CsgPrimitive | CsgOperation
 /** Spec emitted by the AI's create_part_from_description tool and held
  *  in useAppStore.customPartSpec. Dimensions are all mm; the geometry
  *  builder scales the primitive (or CSG tree) into those exact
- *  dimensions. */
+ *  dimensions.
+ *
+ *  The optional DFM-trigger fields below let the model deliberately
+ *  build a part with manufacturing issues (for demos / testing). When
+ *  omitted, applyCustomPart / runUserPartAnalysis fall back to safe
+ *  defaults that score well. */
 export interface CustomPartSpec {
   /** Single-primitive shape. Ignored if `csg` is set. */
   shape: CustomPartShape
@@ -227,6 +232,23 @@ export interface CustomPartSpec {
   partHeight: number
   wallThickness: number
   material: string
+  /** Minimum mold draft angle in degrees. < 1° flags low-draft DFM
+   *  issues; omit for the safe 2° default. */
+  minDraftAngle?: number
+  /** True if the part has unfilleted inside corners — drives stress
+   *  riser warnings. Defaults to false. */
+  hasSharpCorners?: boolean
+  /** False if wall thickness varies across the part — drives sink /
+   *  warp warnings. Defaults to true (uniform). */
+  hasUniformWall?: boolean
+  /** Number of features that require lifters / side actions in the
+   *  mold. 0 keeps tooling simple; higher values flag tooling cost
+   *  issues. Defaults to 0. */
+  numUndercuts?: number
+  /** Overall geometric complexity bucket fed to the cost / DFM model.
+   *  Higher values raise cycle time and tooling estimates. Defaults to
+   *  'moderate'. */
+  complexity?: 'simple' | 'moderate' | 'complex' | 'very_complex'
 }
 
 /** A user-created part registered in the workspace's parts library.

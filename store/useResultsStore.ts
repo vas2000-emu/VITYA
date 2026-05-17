@@ -104,27 +104,36 @@ async function runUserPartAnalysis(
   const partWeight = Math.max(1, volCm3 * 1)
   const projectedArea = Math.max(1, (dims.partLength * dims.partHeight) / 100)
 
+  // DFM-trigger overrides from the AI-created spec (intentionally-bad
+  // parts). STL uploads have no spec, so they always get safe defaults.
+  const aiSpec = part.kind === 'ai-created' ? part.spec : null
+  const minDraftAngle = aiSpec?.minDraftAngle ?? 2
+  const hasSharpCorners = aiSpec?.hasSharpCorners ?? false
+  const hasUniformWall = aiSpec?.hasUniformWall ?? true
+  const numUndercuts = aiSpec?.numUndercuts ?? 0
+  const complexity = aiSpec?.complexity ?? 'moderate'
+
   app.setSimulationBaseline({ ...dims, partVolume, partWeight, projectedArea })
   app.updateSimulationParams({
     ...dims,
     partVolume,
     partWeight,
     projectedArea,
-    complexity: 'moderate',
-    minDraftAngle: 2,
+    complexity,
+    minDraftAngle,
     productionQuantity: 10_000,
     meltTemp: 230,
     moldTemp: 50,
     numCavities: 1,
-    numUndercuts: 0,
-    hasSharpCorners: false,
-    hasUniformWall: true,
+    numUndercuts,
+    hasSharpCorners,
+    hasUniformWall,
   })
   app.updateParameterValue('p-len', dims.partLength)
   app.updateParameterValue('p-wid', dims.partWidth)
   app.updateParameterValue('p-height', dims.partHeight)
   app.updateParameterValue('p-wall', dims.wallThickness)
-  app.updateParameterValue('p-draft', 2)
+  app.updateParameterValue('p-draft', minDraftAngle)
 
   app.setSimulationResults({ isLoading: true, error: null })
   try {
@@ -140,12 +149,12 @@ async function runUserPartAnalysis(
       melt_temp: 230,
       mold_temp: 50,
       production_quantity: 10_000,
-      complexity: 'moderate',
+      complexity,
       num_cavities: 1,
-      num_undercuts: 0,
-      min_draft_angle: 2,
-      has_sharp_corners: false,
-      has_uniform_wall: true,
+      num_undercuts: numUndercuts,
+      min_draft_angle: minDraftAngle,
+      has_sharp_corners: hasSharpCorners,
+      has_uniform_wall: hasUniformWall,
     })
     app.setSimulationResults({
       cost: results.cost,

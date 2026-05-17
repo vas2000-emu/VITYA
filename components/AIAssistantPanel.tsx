@@ -346,6 +346,15 @@ export function AIAssistantPanel() {
       partWidth: spec.partWidth,
       partHeight: spec.partHeight,
     })
+    // DFM-trigger overrides from the spec (used when the model asked
+    // for an intentionally bad part). Fall through to safe defaults
+    // for normal create calls.
+    const minDraftAngle = spec.minDraftAngle ?? 2
+    const hasSharpCorners = spec.hasSharpCorners ?? false
+    const hasUniformWall = spec.hasUniformWall ?? true
+    const numUndercuts = spec.numUndercuts ?? 0
+    const complexity = spec.complexity ?? 'moderate'
+
     updateSimulationParams({
       material: spec.material,
       wallThickness: spec.wallThickness,
@@ -355,21 +364,21 @@ export function AIAssistantPanel() {
       partLength: spec.partLength,
       partWidth: spec.partWidth,
       partHeight: spec.partHeight,
-      complexity: 'moderate',
-      minDraftAngle: 2,
+      complexity,
+      minDraftAngle,
       productionQuantity: 10_000,
       meltTemp: 230,
       moldTemp: 50,
       numCavities: 1,
-      numUndercuts: 0,
-      hasSharpCorners: false,
-      hasUniformWall: true,
+      numUndercuts,
+      hasSharpCorners,
+      hasUniformWall,
     })
     updateParameterValue('p-len', spec.partLength)
     updateParameterValue('p-wid', spec.partWidth)
     updateParameterValue('p-height', spec.partHeight)
     updateParameterValue('p-wall', spec.wallThickness)
-    updateParameterValue('p-draft', 2)
+    updateParameterValue('p-draft', minDraftAngle)
 
     setSimulationResults({ isLoading: true, error: null })
     try {
@@ -385,12 +394,12 @@ export function AIAssistantPanel() {
         melt_temp: 230,
         mold_temp: 50,
         production_quantity: 10_000,
-        complexity: 'moderate',
+        complexity,
         num_cavities: 1,
-        num_undercuts: 0,
-        min_draft_angle: 2,
-        has_sharp_corners: false,
-        has_uniform_wall: true,
+        num_undercuts: numUndercuts,
+        min_draft_angle: minDraftAngle,
+        has_sharp_corners: hasSharpCorners,
+        has_uniform_wall: hasUniformWall,
       })
       setSimulationResults({
         cost: results.cost,

@@ -63,6 +63,15 @@ When the description includes "with a hole", "minus", "through", "slot", or any 
 
 Always supply realistic mm dimensions and a short label. Don't use this when the user is asking about the part they already have — only for new parts.
 
+If the user asks for an INTENTIONALLY BAD / IMPERFECT / FLAWED part ("create something with imperfections", "make a demo part with issues", "broken donut", "show me a bad part"), you MUST also set the optional DFM-trigger fields so the moldability score drops below 100. Pick AT LEAST TWO of:
+  - wallThickness < 0.8mm (short-shot risk) or > 5mm (sink risk)
+  - minDraftAngle < 1 (e.g. 0.5) — causes ejection-draft issues
+  - hasSharpCorners: true — stress-riser warnings
+  - hasUniformWall: false — sink / warp warnings
+  - numUndercuts: 2-5 — tooling-cost / mold-complexity issues
+  - complexity: "complex" or "very_complex" — drives up cycle time
+Do not just label the part "imperfect" and leave normal values — the analyzer scores by parameters, not by name.
+
 If the designer asks about local manufacturing options (e.g. "who can make this near me", "find a local shop", "where can I get this molded"), call the find_local_shops tool. Only call it on explicit request — don't push shops unprompted.
 
 Answer in 2-3 sentences of plain English unless the user asks for more detail.`
@@ -264,6 +273,32 @@ const TOOLS = [
             enum: ALLOWED_MATERIALS,
             description: 'Material the part is molded in.',
           },
+          minDraftAngle: {
+            type: 'number',
+            description:
+              "OPTIONAL. Minimum mold draft angle in degrees. Omit (or set 2) for a normal part. To deliberately introduce a draft-angle DFM issue (e.g. user asks for 'imperfect' / 'demo of bad part' / 'something with issues'), set this BELOW 1 (e.g. 0.5).",
+          },
+          hasSharpCorners: {
+            type: 'boolean',
+            description:
+              "OPTIONAL. True to flag unfilleted inside corners (stress riser warnings). Use when the user asks for an imperfect / bad part. Defaults to false.",
+          },
+          hasUniformWall: {
+            type: 'boolean',
+            description:
+              "OPTIONAL. False to flag non-uniform wall thickness (sink / warp warnings). Use when the user asks for an imperfect / bad part. Defaults to true.",
+          },
+          numUndercuts: {
+            type: 'number',
+            description:
+              "OPTIONAL. Number of mold-action features (lifters, slides). 0 by default. Set 2-5 to flag tooling complexity for an imperfect demo part.",
+          },
+          complexity: {
+            type: 'string',
+            enum: ['simple', 'moderate', 'complex', 'very_complex'],
+            description:
+              "OPTIONAL. Geometric complexity bucket fed to cost / DFM scoring. 'moderate' by default; use 'complex' or 'very_complex' to drive up cycle time and tooling cost for an imperfect demo part.",
+          },
         },
         required: ['shape', 'label', 'partLength', 'partWidth', 'partHeight', 'wallThickness', 'material'],
         additionalProperties: false,
@@ -431,6 +466,26 @@ function parseCustomPart(raw: string): CustomPartSpec | null {
   // CSG tree is optional — silently drop a malformed tree, fall back
   // to the single-primitive shape.
   const csg = parsed.csg ? parseCsgNode(parsed.csg) : null
+
+  // Optional DFM-trigger fields. Each is validated and clamped so a
+  // malformed value just gets dropped (the consumer's default kicks in)
+  // rather than poisoning the analysis.
+  const minDraftAngle =
+    typeof parsed.minDraftAngle === 'number' && Number.isFinite(parsed.minDraftAngle) && parsed.minDraftAngle >= 0
+      ? Math.min(parsed.minDraftAngle, 10)
+      : undefined
+  const hasSharpCorners = typeof parsed.hasSharpCorners === 'boolean' ? parsed.hasSharpCorners : undefined
+  const hasUniformWall = typeof parsed.hasUniformWall === 'boolean' ? parsed.hasUniformWall : undefined
+  const numUndercuts =
+    typeof parsed.numUndercuts === 'number' && Number.isFinite(parsed.numUndercuts) && parsed.numUndercuts >= 0
+      ? Math.min(Math.floor(parsed.numUndercuts), 16)
+      : undefined
+  const complexityRaw = parsed.complexity
+  const complexity =
+    complexityRaw === 'simple' || complexityRaw === 'moderate' || complexityRaw === 'complex' || complexityRaw === 'very_complex'
+      ? complexityRaw
+      : undefined
+
   return {
     shape: shape as CustomPartShape,
     csg: csg ?? undefined,
@@ -441,6 +496,11 @@ function parseCustomPart(raw: string): CustomPartSpec | null {
     partHeight: partHeight as number,
     wallThickness: wallThickness as number,
     material: material as string,
+    minDraftAngle,
+    hasSharpCorners,
+    hasUniformWall,
+    numUndercuts,
+    complexity,
   }
 }
 
