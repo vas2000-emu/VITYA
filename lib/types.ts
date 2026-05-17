@@ -36,17 +36,36 @@ export type RightPanelType = 'ai' | 'manufacturing'
 
 // Chat
 
-/** Fields the AI assistant is allowed to modify on the part.
- *  Intentionally limited to manufacturing-side parameters (wall, draft)
- *  — part length / width / height are the customer's spec and stay
- *  under direct user control via the Parameters panel only. */
-export type DesignField = 'wallThickness' | 'minDraftAngle'
+/** Fields the AI assistant is allowed to modify on the part. Covers
+ *  geometry (L/W/H/wall), manufacturing (draft), material, and the
+ *  production-side levers (cavities, quantity). The accept handler
+ *  fans these out to the right destinations: numeric/dimension fields
+ *  go through both updateSimulationParams AND updateParameterValue;
+ *  material / cavities / quantity go through updateSimulationParams
+ *  only (they have no entry in the Parameters panel). */
+export type DesignField =
+  | 'wallThickness'
+  | 'minDraftAngle'
+  | 'partLength'
+  | 'partWidth'
+  | 'partHeight'
+  | 'material'
+  | 'numCavities'
+  | 'productionQuantity'
+
+/** Allowed material values for `material` proposals. Mirrors the
+ *  options the moldsim engine knows about (lib/moldsim/materials.ts). */
+export const ALLOWED_MATERIALS = ['ABS', 'PP', 'PE-HD', 'PA6', 'PC'] as const
+export type AllowedMaterial = (typeof ALLOWED_MATERIALS)[number]
 
 export interface DesignChange {
   field: DesignField
-  /** Target value. Units are implied by the field: mm for
-   *  wallThickness, degrees for minDraftAngle. */
-  value: number
+  /** Target value. Units implied by the field:
+   *   - wallThickness / partLength / partWidth / partHeight: mm
+   *   - minDraftAngle: degrees
+   *   - numCavities / productionQuantity: integer count
+   *   - material: AllowedMaterial string */
+  value: number | string
 }
 
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected'

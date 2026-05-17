@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { findLocalShops } from '@/lib/localShops'
-import type { DesignChange, DesignField, DesignProposal } from '@/lib/types'
+import { ALLOWED_MATERIALS, type AllowedMaterial, type DesignChange, type DesignField, type DesignProposal } from '@/lib/types'
 
 // Server-side route — process.env.OPENAI_API_KEY is never sent to the
 // browser. The frontend POSTs the conversation history here and gets
@@ -11,13 +11,26 @@ const SYSTEM_PROMPT_BASE = `You are MoldLocal's AI design assistant. MoldLocal i
 
 Your job is to help the designer understand and improve their part. Focus on injection-molding fundamentals: undercuts, draft angles, wall thickness, parting line, gate placement, cooling, ejection, tooling complexity, and how design choices affect cost and lead time. Be direct and conversational — no lecturing.
 
-When the designer asks how to improve the part, or describes a problem you can fix by adjusting wall thickness or the minimum draft angle, call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Do NOT use it to change part length / width / height — those are the customer's spec and stay under direct user control. Do not call it for problems you cannot fix with wall or draft (sharp corners, material switching, gate placement, dimensions). Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed.
+When the designer asks how to improve the part, or describes a problem you can fix with one of the design parameters below, call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Levers you can propose:
+  - wallThickness (mm), minDraftAngle (degrees) — manufacturing-side
+  - partLength / partWidth / partHeight (mm) — dimensions; only propose if the user explicitly asks to resize, or if the part won't fit a standard press
+  - material — must be one of: ${ALLOWED_MATERIALS.join(', ')}
+  - numCavities (integer, 1-32) — mold layout / batch lever
+  - productionQuantity (integer) — run-size lever; affects cost amortization, not geometry
 
-If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension, or "is this thick enough?" without naming a material grade), ask one focused follow-up question first instead of guessing.
+Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed. Don't propose changes for things outside this list (sharp corners, fillets, gate placement, hole positions).
+
+If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension), ask one focused follow-up question first instead of guessing.
 
 If the designer asks about local manufacturing options (e.g. "who can make this near me", "find a local shop", "where can I get this molded"), call the find_local_shops tool. Only call it on explicit request — don't push shops unprompted.
 
 Answer in 2-3 sentences of plain English unless the user asks for more detail.`
+
+/** Appended to SYSTEM_PROMPT_BASE when ChatRequestBody.intent === 'suggestions'.
+ *  Tells the model to emit MULTIPLE distinct propose_design_change tool calls
+ *  rather than a single conversational reply, so the panel can render the
+ *  result as a row of independent suggestion cards. */
+const SUGGESTIONS_ADDENDUM = `\n\nYou are being asked to generate a panel of design optimizations, not to chat. Emit 2-3 SEPARATE propose_design_change tool calls covering DIFFERENT angles (e.g. one for moldability, one for cost, one for material). Each call should be self-contained with its own title and rationale. Do not produce conversational text alongside the tool calls — the panel only renders the proposals.`
 
 interface PartContext {
   partId?: string
@@ -37,10 +50,17 @@ interface ChatRequestBody {
   /** Optional snapshot of the current simulationParams so the model
    *  can reference real values when proposing changes. */
   context?: PartContext
+  /** 'chat' (default): normal conversational reply, maybe one inline
+   *   proposal as a single tool call.
+   *  'suggestions': the model is being asked to populate the
+   *   suggestion-cards panel — emit multiple propose_design_change
+   *   calls at once. Response is `{proposals: DesignProposal[]}`. */
+  intent?: 'chat' | 'suggestions'
 }
 
-function buildSystemPrompt(ctx: PartContext | undefined): string {
-  if (!ctx) return SYSTEM_PROMPT_BASE
+function buildSystemPrompt(ctx: PartContext | undefined, intent?: 'chat' | 'suggestions'): string {
+  const addendum = intent === 'suggestions' ? SUGGESTIONS_ADDENDUM : ''
+  if (!ctx) return SYSTEM_PROMPT_BASE + addendum
 
   const identity: string[] = []
   if (ctx.partName) identity.push(`The designer is currently working on: ${ctx.partName}.`)
@@ -56,7 +76,7 @@ function buildSystemPrompt(ctx: PartContext | undefined): string {
   if (typeof ctx.partHeight === 'number') params.push(`partHeight: ${ctx.partHeight} mm`)
   if (typeof ctx.numUndercuts === 'number') params.push(`numUndercuts: ${ctx.numUndercuts}`)
 
-  if (identity.length === 0 && params.length === 0) return SYSTEM_PROMPT_BASE
+  if (identity.length === 0 && params.length === 0) return SYSTEM_PROMPT_BASE + addendum
 
   const sections: string[] = [SYSTEM_PROMPT_BASE]
   if (identity.length > 0) sections.push(`Current part:\n${identity.join(' ')}`)
@@ -64,10 +84,33 @@ function buildSystemPrompt(ctx: PartContext | undefined): string {
     const bullets = params.map((l) => '- ' + l).join('\n')
     sections.push(`Current parameter values:\n${bullets}`)
   }
-  return sections.join('\n\n')
+  return sections.join('\n\n') + addendum
 }
 
-const ALLOWED_FIELDS: DesignField[] = ['wallThickness', 'minDraftAngle']
+const ALLOWED_FIELDS: DesignField[] = [
+  'wallThickness',
+  'minDraftAngle',
+  'partLength',
+  'partWidth',
+  'partHeight',
+  'material',
+  'numCavities',
+  'productionQuantity',
+]
+
+/** Per-field expected JSON-value type, used by parseProposal to drop
+ *  any change whose value doesn't match (a malformed material change
+ *  with a numeric value, etc.). */
+const FIELD_VALUE_TYPE: Record<DesignField, 'number' | 'string'> = {
+  wallThickness: 'number',
+  minDraftAngle: 'number',
+  partLength: 'number',
+  partWidth: 'number',
+  partHeight: 'number',
+  material: 'string',
+  numCavities: 'number',
+  productionQuantity: 'number',
+}
 
 const TOOLS = [
   {
@@ -99,7 +142,7 @@ const TOOLS = [
     function: {
       name: 'propose_design_change',
       description:
-        'Propose a concrete change to the part\'s manufacturing parameters (wall thickness and / or minimum draft angle) that the designer can Accept or Reject. The accepted change is applied to the 3D model and re-runs DFM. Do NOT propose changes to part length, width, or height — those are the customer\'s spec.',
+        "Propose a concrete change to the part the designer can Accept or Reject. The accepted change applies to simulationParams (3D model + DFM + cost all re-derive). Covers manufacturing parameters (wallThickness, minDraftAngle), dimensions (partLength, partWidth, partHeight), material switching, and production levers (numCavities, productionQuantity).",
       parameters: {
         type: 'object',
         properties: {
@@ -121,11 +164,20 @@ const TOOLS = [
                 field: {
                   type: 'string',
                   enum: ALLOWED_FIELDS,
-                  description: 'Which simulationParams field to set.',
+                  description:
+                    'Which simulationParams field to set. Numeric fields take number values; material takes a string from the allowed list.',
                 },
                 value: {
-                  type: 'number',
-                  description: 'Target value. Units: mm for wallThickness, degrees for minDraftAngle.',
+                  // Schema accepts both (OpenAI tool schemas allow type unions);
+                  // parseProposal on the server enforces the per-field type via
+                  // FIELD_VALUE_TYPE so an unmatched-type change gets dropped.
+                  type: ['number', 'string'],
+                  description: `Target value. Units / domain per field:
+- wallThickness, partLength, partWidth, partHeight: number, mm
+- minDraftAngle: number, degrees (typically 1-5)
+- numCavities: integer 1-32
+- productionQuantity: integer (1000-1000000 typical)
+- material: one of "${ALLOWED_MATERIALS.join('", "')}"`,
                 },
               },
               required: ['field', 'value'],
@@ -146,6 +198,26 @@ interface RawProposalArgs {
   changes?: unknown
 }
 
+/** Validate a single raw change tuple. Numeric fields must be finite
+ *  numbers; material must be one of ALLOWED_MATERIALS. Returns null
+ *  for any mismatch so parseProposal can silently drop it. */
+function parseChange(raw: unknown): DesignChange | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const field = (raw as { field?: unknown }).field
+  const value = (raw as { value?: unknown }).value
+  if (!ALLOWED_FIELDS.includes(field as DesignField)) return null
+  const f = field as DesignField
+  const expected = FIELD_VALUE_TYPE[f]
+  if (expected === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null
+    return { field: f, value }
+  }
+  // expected === 'string' (material only today)
+  if (typeof value !== 'string') return null
+  if (f === 'material' && !ALLOWED_MATERIALS.includes(value as AllowedMaterial)) return null
+  return { field: f, value }
+}
+
 /** Validate a raw tool-call argument blob into a DesignProposal we can
  *  hand to the client. Returns null if the shape is wrong rather than
  *  throwing — a malformed proposal becomes a no-op the model can retry. */
@@ -160,12 +232,8 @@ function parseProposal(raw: string, idHint: string): DesignProposal | null {
   if (!Array.isArray(parsed.changes) || parsed.changes.length === 0) return null
   const changes: DesignChange[] = []
   for (const c of parsed.changes) {
-    if (typeof c !== 'object' || c === null) continue
-    const field = (c as { field?: unknown }).field
-    const value = (c as { value?: unknown }).value
-    if (typeof value !== 'number' || !Number.isFinite(value)) continue
-    if (!ALLOWED_FIELDS.includes(field as DesignField)) continue
-    changes.push({ field: field as DesignField, value })
+    const parsedChange = parseChange(c)
+    if (parsedChange) changes.push(parsedChange)
   }
   if (changes.length === 0) return null
   return {
@@ -205,20 +273,32 @@ interface ToolCall {
 
 /** If any of the model's tool calls is a propose_design_change, build
  *  the final NextResponse here and return it. Returning null means "no
- *  short-circuit; continue the tool-loop normally". */
+ *  short-circuit; continue the tool-loop normally".
+ *
+ *  Single proposal call -> `{reply, proposal}` (inline-chat shape).
+ *  Multiple proposal calls -> `{reply, proposals: [...]}` (suggestion-panel shape).
+ *  The client uses whichever key is present. */
 function maybeProposalResponse(toolCalls: ToolCall[], rawContent: string | null) {
-  const proposalCall = toolCalls.find((c) => c.function.name === 'propose_design_change')
-  if (!proposalCall) return null
+  const proposalCalls = toolCalls.filter((c) => c.function.name === 'propose_design_change')
+  if (proposalCalls.length === 0) return null
   const replyText = rawContent?.trim() ?? ''
-  const proposal = parseProposal(proposalCall.function.arguments || '{}', proposalCall.id)
-  if (proposal) {
+  const proposals = proposalCalls
+    .map((c) => parseProposal(c.function.arguments || '{}', c.id))
+    .filter((p): p is DesignProposal => p !== null)
+  if (proposals.length === 0) {
     return NextResponse.json({
-      reply: replyText || `Proposed: ${proposal.title}`,
-      proposal,
+      reply: replyText || '(proposal was malformed; please retry)',
+    })
+  }
+  if (proposals.length === 1) {
+    return NextResponse.json({
+      reply: replyText || `Proposed: ${proposals[0].title}`,
+      proposal: proposals[0],
     })
   }
   return NextResponse.json({
-    reply: replyText || '(proposal was malformed; please retry)',
+    reply: replyText || `Generated ${proposals.length} optimizations`,
+    proposals,
   })
 }
 
@@ -275,6 +355,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Conversation grows during tool-call loop; start with system + user history.
+  // intent='suggestions' tells buildSystemPrompt to append the multi-proposal
+  // addendum so the model emits 2-3 separate propose_design_change tool calls.
   const conversation: Array<{
     role: string
     content?: string | null
@@ -282,7 +364,7 @@ export async function POST(req: NextRequest) {
     tool_call_id?: string
     name?: string
   }> = [
-    { role: 'system', content: buildSystemPrompt(body.context) },
+    { role: 'system', content: buildSystemPrompt(body.context, body.intent) },
     ...body.messages,
   ]
 

@@ -1,61 +1,87 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ThumbsUp,
   ThumbsDown,
-  MoreHorizontal,
-  ChevronDown,
-  ChevronRight,
   Check,
   X,
   PanelRightClose,
   PanelRight,
+  Sparkles,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import type {
-  AISuggestion,
   ChatMessage,
   DesignChange,
   DesignField,
   DesignProposal,
-  Operation,
-  OperationType,
   PartId,
 } from '@/lib/types'
 
-/** Human-readable labels for the parameter fields the AI can propose
- *  changes to. Keep these in sync with DesignField in lib/types.ts.
- *  Part length / width / height are intentionally excluded so the AI
- *  can only propose manufacturing-side changes. */
+/** Human-readable labels for every field the AI can propose. Keep in
+ *  sync with DesignField in lib/types.ts. */
 const FIELD_LABELS: Record<DesignField, string> = {
   wallThickness: 'Wall thickness',
   minDraftAngle: 'Min draft angle',
+  partLength: 'Length',
+  partWidth: 'Width',
+  partHeight: 'Height',
+  material: 'Material',
+  numCavities: 'Mold cavities',
+  productionQuantity: 'Production qty',
 }
 
-/** Display units for the proposal card. The AI still proposes in mm
- *  internally (engine + system prompt + tool schema all speak mm), so
- *  the card converts at render time only. minDraftAngle stays degrees. */
+/** Display units for the proposal card. The engine + system prompt +
+ *  tool schema all speak mm internally; the card converts at render
+ *  time only. Material / cavities / quantity have no unit. */
 const FIELD_UNITS: Record<DesignField, string> = {
   wallThickness: 'in',
   minDraftAngle: 'deg',
+  partLength: 'in',
+  partWidth: 'in',
+  partHeight: 'in',
+  material: '',
+  numCavities: '',
+  productionQuantity: 'units',
 }
 
-/** Convert the AI's mm-native value to whatever units the panel shows.
- *  Wall thickness gets converted to inches; draft stays as-is. */
-function formatChangeValue(field: DesignField, value: number): string {
-  if (field === 'wallThickness') return (value / 25.4).toFixed(3)
+const MM_PER_INCH_AI = 25.4
+const INCH_FIELDS: ReadonlySet<DesignField> = new Set([
+  'wallThickness',
+  'partLength',
+  'partWidth',
+  'partHeight',
+])
+
+/** Convert the AI's underlying value to the format the proposal card
+ *  shows. Length / wall in mm → inches, integer-style fields render
+ *  without decimals, material renders as the raw string. */
+function formatChangeValue(field: DesignField, value: number | string): string {
+  if (field === 'material') return String(value)
+  if (typeof value !== 'number') return String(value)
+  if (INCH_FIELDS.has(field)) {
+    const inches = value / MM_PER_INCH_AI
+    return inches < 10 ? inches.toFixed(3) : inches.toFixed(1)
+  }
+  if (field === 'productionQuantity') return value.toLocaleString()
   return value.toString()
 }
 
-/** Inverse of ParameterPanel's paramToSimulationKey. simulationParams is
- *  the source of truth for the 3D geometry / DFM scoring, but the
- *  left-hand Parameters panel reads from the separate `parameters[]`
- *  array, so an accepted proposal has to write to both. */
-const FIELD_TO_PARAM_ID: Record<DesignField, string> = {
+/** Inverse of ParameterPanel's paramToSimulationKey. Only the design
+ *  parameters that have a row in the left-hand Parameters panel get a
+ *  mapping; material / numCavities / productionQuantity are only in
+ *  simulationParams (not in `parameters[]`), so the accept handler
+ *  skips updateParameterValue for those. */
+const FIELD_TO_PARAM_ID: Partial<Record<DesignField, string>> = {
   wallThickness: 'p-wall',
   minDraftAngle: 'p-draft',
+  partLength: 'p-len',
+  partWidth: 'p-wid',
+  partHeight: 'p-height',
 }
 
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
@@ -79,169 +105,9 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   },
 ]
 
-const operationColors: Record<OperationType, string> = {
-  add: 'text-green-400',
-  modify: 'text-blue-400',
-  delete: 'text-red-400',
-}
-
-const operationSymbols: Record<OperationType, string> = {
-  add: '+',
-  modify: '~',
-  delete: '-',
-}
-
-interface OperationItemProps {
-  operation: Operation
-  onPreview: () => void
-}
-
-function OperationItem({ operation, onPreview }: OperationItemProps) {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900/50">
-      <div
-        className="flex items-start gap-2 p-3 cursor-pointer hover:bg-zinc-800/50"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className={`mt-0.5 font-mono text-sm ${operationColors[operation.type]}`}>
-          {operationSymbols[operation.type]}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium">{operation.feature}</div>
-          <div className="text-xs text-zinc-400 mt-0.5">{operation.description}</div>
-        </div>
-        <button className="p-1 hover:bg-zinc-700 rounded">
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        </button>
-      </div>
-
-      {expanded && operation.parameters && (
-        <div className="px-3 pb-3 pt-0 border-t border-zinc-800 bg-zinc-950/50">
-          <div className="text-xs text-zinc-500 mb-2 mt-2">Parameters:</div>
-          <div className="space-y-1">
-            {Object.entries(operation.parameters).map(([key, value]) => (
-              <div key={key} className="flex items-center justify-between text-xs font-mono">
-                <span className="text-zinc-400">{key}</span>
-                <span className="text-blue-400">{JSON.stringify(value)}</span>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onPreview()
-            }}
-            className="w-full mt-3 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded"
-          >
-            Preview Change
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface SuggestionCardProps {
-  suggestion: AISuggestion
-  onAccept: (id: string) => void
-  onReject: (id: string) => void
-  onPreview: (id: string) => void
-}
-
-function SuggestionCard({ suggestion, onAccept, onReject, onPreview }: SuggestionCardProps) {
-  const [expanded, setExpanded] = useState(true)
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'previewing':
-        return <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">Previewing</span>
-      case 'accepted':
-        return <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded">Accepted</span>
-      case 'rejected':
-        return <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">Rejected</span>
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900">
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-medium">{suggestion.title}</h3>
-              {getStatusBadge(suggestion.status)}
-            </div>
-            <p className="text-sm text-zinc-400">{suggestion.description}</p>
-          </div>
-          <button className="p-1 hover:bg-zinc-800 rounded">
-            <MoreHorizontal className="size-4" />
-          </button>
-        </div>
-
-        <div
-          className="flex items-center gap-2 mb-3 text-xs text-zinc-400 cursor-pointer hover:text-zinc-300"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          <span>{suggestion.operations.length} operations</span>
-        </div>
-
-        {expanded && (
-          <div className="space-y-2 mb-4">
-            {suggestion.operations.map((op) => (
-              <OperationItem
-                key={op.id}
-                operation={op}
-                onPreview={() => onPreview(suggestion.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          {suggestion.status === 'pending' && (
-            <button
-              onClick={() => onPreview(suggestion.id)}
-              className="flex-1 px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded"
-            >
-              Preview
-            </button>
-          )}
-          {suggestion.status === 'previewing' && (
-            <>
-              <button
-                onClick={() => onReject(suggestion.id)}
-                className="flex-1 px-3 py-2 text-sm bg-red-600/10 hover:bg-red-600/20 text-red-400 rounded flex items-center justify-center gap-2"
-              >
-                <X className="size-4" />
-                Reject
-              </button>
-              <button
-                onClick={() => onAccept(suggestion.id)}
-                className="flex-1 px-3 py-2 text-sm bg-green-600 hover:bg-green-700 rounded flex items-center justify-center gap-2"
-              >
-                <Check className="size-4" />
-                Accept
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function AIAssistantPanel() {
   const [message, setMessage] = useState('')
   const {
-    aiSuggestions,
-    acceptSuggestion,
-    rejectSuggestion,
-    previewSuggestion,
     rightCollapsed,
     setRightCollapsed,
     chatMessages,
@@ -256,6 +122,17 @@ export function AIAssistantPanel() {
     uploadedSTL,
   } = useAppStore()
 
+  // Dynamic suggestion-card state. Populated on mount via a single
+  // /api/ai/chat call with intent='suggestions'; the model emits 2-3
+  // separate propose_design_change tool calls covering different
+  // improvement angles, and we render each as a ProposalCard.
+  const [suggestions, setSuggestions] = useState<DesignProposal[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
+  // Guard the on-mount fetch so React StrictMode's double-invoke (or a
+  // currentPartId effect re-fire) doesn't trigger two concurrent calls.
+  const suggestionsFetchedFor = useRef<string | null>(null)
+
   // Friendly part identity for the AI context. partsLibrary has hero
   // names + a one-line summary for each of the 4 demo parts; uploaded
   // STLs aren't in the library so we fall back to a generic label.
@@ -265,6 +142,94 @@ export function AIAssistantPanel() {
     : partEntry?.partName ?? currentPartId
   const partSummary = uploadedSTL ? undefined : partEntry?.partSummary
 
+  // Snapshot the live part state into the AI context payload. Memoized
+  // via the explicit dep list rather than useMemo since it's only
+  // built at call-time inside sendMessage / fetchSuggestions.
+  const buildContext = useCallback(
+    () => ({
+      partId: currentPartId,
+      partName,
+      partSummary,
+      material: simulationParams.material,
+      wallThickness: simulationParams.wallThickness,
+      minDraftAngle: simulationParams.minDraftAngle,
+      partLength: simulationParams.partLength,
+      partWidth: simulationParams.partWidth,
+      partHeight: simulationParams.partHeight,
+      numUndercuts: simulationParams.numUndercuts,
+    }),
+    [currentPartId, partName, partSummary, simulationParams],
+  )
+
+  const fetchSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true)
+    setSuggestionsError(null)
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'user',
+              content:
+                'Generate 2-3 distinct design optimizations for the current part. Each one should target a different angle (e.g. moldability, cost, material). Return them as separate propose_design_change tool calls.',
+            },
+          ],
+          context: buildContext(),
+          intent: 'suggestions',
+        }),
+      })
+      const data = (await res.json()) as {
+        proposals?: DesignProposal[]
+        proposal?: DesignProposal
+        error?: string
+      }
+      if (!res.ok) {
+        setSuggestionsError(data.error ?? `HTTP ${res.status}`)
+        setSuggestions([])
+        return
+      }
+      // Model may collapse to a single proposal; accept either shape.
+      const next = data.proposals ?? (data.proposal ? [data.proposal] : [])
+      setSuggestions(next)
+    } catch (err) {
+      setSuggestionsError(err instanceof Error ? err.message : 'Network error')
+      setSuggestions([])
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }, [buildContext])
+
+  // Fetch one set of suggestions per part. Switching parts re-fetches;
+  // edits within the same part don't (user can hit Regenerate).
+  useEffect(() => {
+    if (suggestionsFetchedFor.current === currentPartId) return
+    suggestionsFetchedFor.current = currentPartId
+    void fetchSuggestions()
+  }, [currentPartId, fetchSuggestions])
+
+  const handleAcceptSuggestion = (proposal: DesignProposal) => {
+    const patch: Record<string, number | string> = {}
+    for (const change of proposal.changes) {
+      patch[change.field] = change.value
+      const paramId = FIELD_TO_PARAM_ID[change.field]
+      if (paramId && typeof change.value === 'number') {
+        updateParameterValue(paramId, change.value)
+      }
+    }
+    updateSimulationParams(patch)
+    setSuggestions((current) =>
+      current.map((p) => (p.id === proposal.id ? { ...p, status: 'accepted' } : p)),
+    )
+  }
+
+  const handleRejectSuggestion = (proposal: DesignProposal) => {
+    setSuggestions((current) =>
+      current.map((p) => (p.id === proposal.id ? { ...p, status: 'rejected' } : p)),
+    )
+  }
+
   /** Apply a proposal's changes. simulationParams drives the 3D
    *  geometry, the live DFM score, and the analysis pages — one
    *  updateSimulationParams call fans out to all of those. But the
@@ -273,10 +238,19 @@ export function AIAssistantPanel() {
    *  the panel's displayed number matches what was actually applied
    *  downstream. */
   const handleAcceptProposal = (messageId: string, proposal: DesignProposal) => {
-    const patch: Record<string, number> = {}
+    // Accumulator covers both number-valued fields (dimensions, draft,
+    // cavities, qty) and string-valued ones (material). Cast at the
+    // dispatch boundary; updateSimulationParams takes Partial<SimulationParams>.
+    const patch: Record<string, number | string> = {}
     for (const change of proposal.changes) {
       patch[change.field] = change.value
-      updateParameterValue(FIELD_TO_PARAM_ID[change.field], change.value)
+      const paramId = FIELD_TO_PARAM_ID[change.field]
+      // Only mirror into parameters[] when there's a row for it in the
+      // panel. material / numCavities / productionQuantity live only in
+      // simulationParams and skip this step.
+      if (paramId && typeof change.value === 'number') {
+        updateParameterValue(paramId, change.value)
+      }
     }
     updateSimulationParams(patch)
     updateChatMessage(messageId, {
@@ -379,17 +353,44 @@ export function AIAssistantPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="text-sm text-zinc-400 mb-4">
-          AI suggestions based on design analysis and manufacturing requirements.
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-sm text-zinc-300">
+            <Sparkles className="size-4 text-blue-300" />
+            <span className="font-medium">Suggested optimizations</span>
+            {suggestionsLoading && <Loader2 className="size-3 animate-spin text-zinc-500" />}
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchSuggestions()}
+            disabled={suggestionsLoading}
+            title="Regenerate optimizations"
+            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded disabled:opacity-40"
+          >
+            <RefreshCw className={`size-3 ${suggestionsLoading ? 'animate-spin' : ''}`} />
+            Regenerate
+          </button>
         </div>
 
-        {aiSuggestions.map((suggestion) => (
-          <SuggestionCard
-            key={suggestion.id}
-            suggestion={suggestion}
-            onAccept={acceptSuggestion}
-            onReject={rejectSuggestion}
-            onPreview={previewSuggestion}
+        {suggestionsError && (
+          <div className="text-xs px-3 py-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-200">
+            Couldn&apos;t generate suggestions: {suggestionsError}
+          </div>
+        )}
+
+        {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && (
+          <div className="border border-dashed border-zinc-700 rounded-lg p-4 text-center">
+            <div className="text-xs text-zinc-500">
+              No suggestions yet. Hit Regenerate to ask the AI.
+            </div>
+          </div>
+        )}
+
+        {suggestions.map((proposal) => (
+          <ProposalCard
+            key={proposal.id}
+            proposal={proposal}
+            onAccept={() => handleAcceptSuggestion(proposal)}
+            onReject={() => handleRejectSuggestion(proposal)}
           />
         ))}
 
