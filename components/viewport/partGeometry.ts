@@ -405,15 +405,16 @@ function buildCustomTorusGeometry(
   height: number,
   width: number,
 ): THREE.BufferGeometry {
-  // Build a unit torus then non-uniformly scale into the requested bbox.
-  // tubeRadius = height/2 (so the donut "rises" by exactly height).
-  // majorRadius is just 0.5 (unit), then scale.x/scale.z stretch it.
-  const tubeR = 0.5 // pre-scale
+  // majorR + tubeR = 0.5 (unit outer radius before X/Z scale).
+  // tubeR = 0.2 → inner hole = 2*(majorR-tubeR) = 0.6 of outer diameter (~40% hole).
+  // Scale X/Z to fit the declared bbox; Y is scaled so the tube fills `height`.
+  const tubeR = 0.2
   const majorR = 0.5
+  const outerD = 2 * (majorR + tubeR) // 1.4 before scale
+  const tubeD = 2 * tubeR             // 0.4 before scale
   const geom = new THREE.TorusGeometry(majorR, tubeR, 24, 64)
-  // Torus is built in XY plane; rotate so it lies flat (axis along Y).
   geom.rotateX(Math.PI / 2)
-  geom.scale(length, height, width)
+  geom.scale(length / outerD, height / tubeD, width / outerD)
   return geom
 }
 
