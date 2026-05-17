@@ -152,7 +152,18 @@ export interface MoldChecklistItem {
   status: MoldChecklistStatus
 }
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper' | 'custom'
+/** Built-in demo part IDs that have hand-authored rich-text fields
+ *  in partsLibrary + partSimInputs. Used to type the exhaustive
+ *  Record<DemoPartId, ...> lookup tables. */
+export type DemoPartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
+
+/** Runtime part ID. Demo IDs are preserved as literals (autocomplete /
+ *  hover shows them), but ANY string is accepted so user-registered
+ *  parts can use generated IDs like 'user-<timestamp>'. Code that
+ *  needs to branch should use the safe accessors getDashboardAnalysis
+ *  / getPartSimInputs (return null for non-demo IDs) or check
+ *  membership against the UserPart registry. */
+export type PartId = DemoPartId | 'custom' | (string & {})
 
 /** Allowed primitive shapes for AI-generated parts. Strict enum so the
  *  renderer never receives a shape it can't build. */
@@ -173,6 +184,35 @@ export interface CustomPartSpec {
   wallThickness: number
   material: string
 }
+
+/** A user-created part registered in the workspace's parts library.
+ *  Either AI-generated from a CustomPartSpec or imported from a
+ *  user-uploaded STL. Lives alongside the four hardcoded demo parts in
+ *  the sidebar / parts ribbon. Persists in-memory for the session. */
+export type UserPart =
+  | {
+      id: string
+      kind: 'ai-created'
+      label: string
+      description?: string
+      spec: CustomPartSpec
+      createdAt: number
+    }
+  | {
+      id: string
+      kind: 'uploaded'
+      label: string
+      stlUrl: string
+      /** Original STL bounding-box dimensions in mm (user-confirmed
+       *  via UploadAnalyzeModal). Used to scale the camera + drive
+       *  the simulation params when this part is re-selected. */
+      partLength: number
+      partWidth: number
+      partHeight: number
+      wallThickness: number
+      material: string
+      createdAt: number
+    }
 
 export interface MoldAnalysisResult {
   partId: PartId

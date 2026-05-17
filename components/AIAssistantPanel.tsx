@@ -127,6 +127,7 @@ export function AIAssistantPanel() {
     uploadedSTL,
     setUploadedSTL,
     setCustomPartSpec,
+    addUserPart,
   } = useAppStore()
 
   // Dynamic suggestion-card state. Populated on mount via a single
@@ -272,10 +273,11 @@ export function AIAssistantPanel() {
   }
 
   /** Apply a CustomPartSpec emitted by create_part_from_description.
-   *  Registers the spec in the store, switches currentPartId to 'custom'
-   *  (which makes Part.tsx render the procedural primitive), pushes the
-   *  spec's dimensions into simulationParams + the Parameters panel,
-   *  then fires the moldsim API so every workspace surface lights up. */
+   *  Registers the spec in the user-parts registry (so it shows up in
+   *  the sidebar + part library), points the viewport at it, mirrors
+   *  the spec's dimensions into simulationParams + the Parameters
+   *  panel, then fires the moldsim API so every workspace surface
+   *  lights up. */
   const applyCustomPart = async (spec: CustomPartSpec) => {
     // Clear any uploaded STL so the viewport shows the procedural part
     // we're about to register, not the stale STL geometry.
@@ -283,8 +285,22 @@ export function AIAssistantPanel() {
       URL.revokeObjectURL(uploadedSTL)
       setUploadedSTL(null)
     }
+    // Register the part in the library FIRST so it appears in the
+    // sidebar / parts ribbon even if the analysis API call below fails.
+    // currentPartId == the user-part id so the sidebar's "active"
+    // highlight matches; the viewport branches on customPartSpec
+    // presence (see Part.tsx) rather than the string id.
+    const partId = `user-${Date.now()}`
+    addUserPart({
+      id: partId,
+      kind: 'ai-created',
+      label: spec.label,
+      description: spec.description,
+      spec,
+      createdAt: Date.now(),
+    })
     setCustomPartSpec(spec)
-    setCurrentPartId('custom')
+    setCurrentPartId(partId)
 
     // Thin-shell volume / weight proxy, same approach the upload modal uses.
     const volCm3 =

@@ -4,7 +4,7 @@ import { moldAnalysisData, getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
 import { getPartSimInputs } from '@/lib/partSimInputs'
 import { runFullAnalysis, type FullAnalysisResponse } from '@/lib/moldsim-api'
 import { useAppStore } from '@/store/useAppStore'
-import type { MoldAnalysisResult, PartId } from '@/lib/types'
+import type { MoldAnalysisResult, PartId, UserPart } from '@/lib/types'
 
 /**
  * Loading phases shown by LoadingScreen. Each phase has a label and a
@@ -55,6 +55,11 @@ interface ResultsState {
    *  viewport's currentPartId, clears any user-uploaded STL, and fires
    *  the moldsim API for the new part. */
   selectPart: (id: PartId) => void
+  /** Switch the active part to one of the user-registered entries
+   *  (AI-generated or STL-uploaded). Hydrates simulationParams +
+   *  geometry baselines from the UserPart, sets currentPartId, fires
+   *  the moldsim API. Counterpart to selectPart for demo entries. */
+  selectUserPart: (part: UserPart) => Promise<void>
   /** Fire moldsim API for the current part. Updates `liveResults`,
    *  drives the loading screen, and overrides `analysis` scores with
    *  API-derived values (cost, dfm score, cycle time). */
@@ -201,6 +206,108 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     // Fire the moldsim API for the new part. simulateToken bump inside
     // runMoldsim cancels any earlier in-flight run.
     void get().runMoldsim()
+  },
+
+  selectUserPart: async (part) => {
+    // Snapshot dimensions / material / wall from whichever variant.
+    const dims =
+      part.kind === 'ai-created'
+        ? {
+            partLength: part.spec.partLength,
+            partWidth: part.spec.partWidth,
+            partHeight: part.spec.partHeight,
+            wallThickness: part.spec.wallThickness,
+            material: part.spec.material,
+          }
+        : {
+            partLength: part.partLength,
+            partWidth: part.partWidth,
+            partHeight: part.partHeight,
+            wallThickness: part.wallThickness,
+            material: part.material,
+          }
+
+    const app = useAppStore.getState()
+    if (part.kind === 'ai-created') {
+      // STL upload (if any) is stale once we switch to an AI part.
+      if (app.uploadedSTL) {
+        URL.revokeObjectURL(app.uploadedSTL)
+        app.setUploadedSTL(null)
+      }
+      app.setCustomPartSpec(part.spec)
+    } else {
+      // Uploaded part: reinstate the stored Blob URL on the viewport
+      // (the user may have cleared it earlier).
+      app.setUploadedSTL(part.stlUrl)
+      app.setCustomPartSpec(null)
+    }
+    app.setCurrentPartId(part.id)
+
+    // Coarse thin-shell proxies, same shape as the upload modal +
+    // AIAssistantPanel.applyCustomPart use.
+    const volCm3 = (dims.partLength * dims.partWidth * dims.partHeight * dims.wallThickness) / 1_000_000
+    const partVolume = Math.max(1, volCm3)
+    const partWeight = Math.max(1, volCm3 * 1)
+    const projectedArea = Math.max(1, (dims.partLength * dims.partHeight) / 100)
+
+    app.setSimulationBaseline({ ...dims, partVolume, partWeight, projectedArea })
+    app.updateSimulationParams({
+      ...dims,
+      partVolume,
+      partWeight,
+      projectedArea,
+      complexity: 'moderate',
+      minDraftAngle: 2,
+      productionQuantity: 10_000,
+      meltTemp: 230,
+      moldTemp: 50,
+      numCavities: 1,
+      numUndercuts: 0,
+      hasSharpCorners: false,
+      hasUniformWall: true,
+    })
+    app.updateParameterValue('p-len', dims.partLength)
+    app.updateParameterValue('p-wid', dims.partWidth)
+    app.updateParameterValue('p-height', dims.partHeight)
+    app.updateParameterValue('p-wall', dims.wallThickness)
+    app.updateParameterValue('p-draft', 2)
+
+    // Run moldsim directly with these inputs — runMoldsim's normal path
+    // reads getPartSimInputs(partId) which returns null for user IDs.
+    app.setSimulationResults({ isLoading: true, error: null })
+    try {
+      const results = await runFullAnalysis({
+        material: dims.material,
+        wall_thickness: dims.wallThickness,
+        part_volume: partVolume,
+        part_weight: partWeight,
+        projected_area: projectedArea,
+        part_length: dims.partLength,
+        part_width: dims.partWidth,
+        part_height: dims.partHeight,
+        melt_temp: 230,
+        mold_temp: 50,
+        production_quantity: 10_000,
+        complexity: 'moderate',
+        num_cavities: 1,
+        num_undercuts: 0,
+        min_draft_angle: 2,
+        has_sharp_corners: false,
+        has_uniform_wall: true,
+      })
+      app.setSimulationResults({
+        cost: results.cost,
+        cooling: results.cooling,
+        dfm: results.manufacturing,
+        filling: results.filling,
+        isLoading: false,
+        error: null,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to analyze part'
+      app.setSimulationResults({ isLoading: false, error: msg })
+      toast.error(msg)
+    }
   },
 
   runMoldsim: async () => {

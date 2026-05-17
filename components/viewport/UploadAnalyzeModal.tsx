@@ -27,11 +27,14 @@ type Unit = 'mm' | 'in'
 export function UploadAnalyzeModal() {
   const pending = useAppStore((s) => s.pendingUploadAnalysis)
   const bbox = useAppStore((s) => s.uploadedSTLBbox)
+  const uploadedSTL = useAppStore((s) => s.uploadedSTL)
   const setPending = useAppStore((s) => s.setPendingUploadAnalysis)
   const updateSimulationParams = useAppStore((s) => s.updateSimulationParams)
   const setSimulationBaseline = useAppStore((s) => s.setSimulationBaseline)
   const setSimulationResults = useAppStore((s) => s.setSimulationResults)
   const updateParameterValue = useAppStore((s) => s.updateParameterValue)
+  const setCurrentPartId = useAppStore((s) => s.setCurrentPartId)
+  const addUserPart = useAppStore((s) => s.addUserPart)
 
   const [unit, setUnit] = useState<Unit>('mm')
   const [material, setMaterial] = useState<string>('ABS')
@@ -124,6 +127,26 @@ export function UploadAnalyzeModal() {
       updateParameterValue('p-height', heiMm)
       updateParameterValue('p-wall', wallMm)
       updateParameterValue('p-draft', draftDeg)
+
+      // Register the uploaded STL as a switchable entry in the parts
+      // sidebar / ribbon. Skip if no STL URL is currently set (modal
+      // could in theory be open with a stale bbox after a clear).
+      if (uploadedSTL) {
+        const partId = `user-${Date.now()}`
+        addUserPart({
+          id: partId,
+          kind: 'uploaded',
+          label: `Uploaded STL (${new Date().toLocaleTimeString()})`,
+          stlUrl: uploadedSTL,
+          partLength: lenMm,
+          partWidth: widMm,
+          partHeight: heiMm,
+          wallThickness: wallMm,
+          material,
+          createdAt: Date.now(),
+        })
+        setCurrentPartId(partId)
+      }
 
       // 2) Hit the moldsim API directly with the inputs we just built.
       // Bypassing useResultsStore.runMoldsim because that path reads

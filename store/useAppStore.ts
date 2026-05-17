@@ -5,6 +5,7 @@ import type {
   Parameter,
   RightPanelType,
   ChatMessage,
+  UserPart,
 } from '@/lib/types'
 import type {
   CostResponse,
@@ -205,6 +206,15 @@ interface AppState {
   // the four demo parts. null until the AI has built a part.
   customPartSpec: CustomPartSpec | null
   setCustomPartSpec: (spec: CustomPartSpec | null) => void
+
+  // Registry of parts the user added at runtime — AI-generated specs
+  // and STL uploads. These appear alongside the four hardcoded demo
+  // parts in PartsSidebar (dashboard) + the Toolbar parts ribbon
+  // (workspace) so the user can switch between them. Persisted
+  // in-memory for the session only (cleared on reload).
+  userParts: UserPart[]
+  addUserPart: (part: UserPart) => void
+  removeUserPart: (id: string) => void
 
   // Flag flipped to true when an STL load completes; UploadAnalyzeModal
   // watches this and opens. Reset to false once the modal is dismissed
@@ -419,6 +429,18 @@ export const useAppStore = create<AppState>((set) => ({
   setUploadedSTLBbox: (b) => set({ uploadedSTLBbox: b }),
   customPartSpec: null,
   setCustomPartSpec: (spec) => set({ customPartSpec: spec }),
+  userParts: [],
+  addUserPart: (part) =>
+    set((s) => ({
+      // De-dupe on id so a re-registered part (same STL re-uploaded,
+      // AI part re-edited) replaces the existing entry rather than
+      // stacking. Most recent at the top of the list.
+      userParts: [part, ...s.userParts.filter((p) => p.id !== part.id)],
+    })),
+  removeUserPart: (id) =>
+    set((s) => ({
+      userParts: s.userParts.filter((p) => p.id !== id),
+    })),
   pendingUploadAnalysis: false,
   setPendingUploadAnalysis: (pending) => set({ pendingUploadAnalysis: pending }),
 

@@ -52,8 +52,11 @@ export function Part() {
     // AI-generated parts dispatch to buildCustomGeometry against the
     // spec held in the store. The spec already encodes L/H/W in mm so
     // we skip getPartGeometry's per-axis scaling step (would double-
-    // scale) and just apply the draft taper on top.
-    if (currentPartId === 'custom' && customPartSpec) {
+    // scale) and just apply the draft taper on top. We branch on the
+    // spec's presence rather than currentPartId === 'custom' so each
+    // user-registered AI part can have a unique id (for sidebar /
+    // ribbon highlighting) while still rendering through this path.
+    if (customPartSpec) {
       const geom = buildCustomGeometry(
         customPartSpec.shape,
         customPartSpec.partLength,

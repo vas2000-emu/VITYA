@@ -1,4 +1,4 @@
-import type { MoldAnalysisResult, PartId } from '@/lib/types'
+import type { DemoPartId, MoldAnalysisResult, PartId } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // Mock analysis data for the MoldLocal results dashboard.
@@ -438,7 +438,7 @@ const bumper: MoldAnalysisResult = {
 // don't appear in the dashboard's part library. The workspace
 // surfaces (ManufacturingPanel, DFM HUD, /analysis/*) render against
 // live moldsim output instead.
-export const partsLibrary: Record<Exclude<PartId, 'custom'>, MoldAnalysisResult> = {
+export const partsLibrary: Record<DemoPartId, MoldAnalysisResult> = {
   bracket,
   phoneCase,
   droneArm,
@@ -450,8 +450,7 @@ export const partsLibrary: Record<Exclude<PartId, 'custom'>, MoldAnalysisResult>
  *  'custom' (or any future widened variant). Call sites that need a
  *  baseline default usually fall back to partsLibrary.bracket. */
 export function getDashboardAnalysis(id: PartId): MoldAnalysisResult | null {
-  if (id === 'custom') return null
-  return partsLibrary[id]
+  return partsLibrary[id as DemoPartId] ?? null
 }
 
 /** Default part loaded into the dashboard on first render. The bumper

@@ -21,6 +21,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
+import { useResultsStore } from '@/store/useResultsStore'
 import { getDashboardAnalysis, partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { PartId } from '@/lib/types'
 
@@ -180,6 +181,8 @@ function PartRibbon({
   onClearUpload: () => void
 }) {
   const partIds = Object.keys(partsLibrary) as Array<Exclude<PartId, 'custom'>>
+  const userParts = useAppStore((s) => s.userParts)
+  const selectUserPart = useResultsStore((s) => s.selectUserPart)
   return (
     <>
       <RibbonGroup bordered>
@@ -197,12 +200,25 @@ function PartRibbon({
           />
         )}
       </RibbonGroup>
+      {userParts.length > 0 && (
+        <RibbonGroup bordered>
+          {userParts.map((part) => (
+            <RibbonButton
+              key={part.id}
+              icon={part.kind === 'ai-created' ? Sparkles : Upload}
+              label={part.label}
+              active={currentPartId === part.id}
+              onClick={() => void selectUserPart(part)}
+            />
+          ))}
+        </RibbonGroup>
+      )}
       <RibbonGroup>
         {partIds.map((id) => (
           <RibbonButton
             key={id}
             icon={FolderOpen}
-            label={partsLibrary[id]?.partName ?? id}
+            label={getDashboardAnalysis(id)?.partName ?? id}
             active={!uploadedSTL && currentPartId === id}
             onClick={() => onSelectPart(id)}
           />
