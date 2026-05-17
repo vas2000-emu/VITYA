@@ -1,9 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ThumbsUp,
-  ThumbsDown,
   Check,
   X,
   PanelRightClose,
@@ -13,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { useLiveDfmScore } from './viewport/useLiveDfmScore'
 import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
 import { runFullAnalysis } from '@/lib/moldsim-api'
 import { generateCustomPartReport } from '@/lib/aiReport'
@@ -88,31 +87,165 @@ const FIELD_TO_PARAM_ID: Partial<Record<DesignField, string>> = {
   partHeight: 'p-height',
 }
 
-// Quick prompts seed the chat with action-oriented requests instead of
-// open-ended questions. Each one nudges the AI toward calling a tool
-// (propose_design_change / create_part_from_description / find_local_shops)
-// rather than just talking. Easy to swap per demo.
-const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  {
-    label: 'Suggest improvements',
-    prompt:
-      "Look at the current part and propose 2-3 specific changes that would improve moldability or cost. Use the propose_design_change tool — don't just describe.",
+type IssueHint = { severity: string; category: string; issue: string; recommendation: string }
+
+/** Returns 4 chat quick-prompts tailored to the live DFM issues. The
+ *  first prompt targets the worst current issue when one exists. */
+function buildDynamicQuickPrompts(issues: IssueHint[]): { label: string; prompt: string }[] {
+  const actionable = issues.filter((i) => i.severity !== 'info')
+  const worst = actionable.find((i) => i.severity === 'critical') ?? actionable[0]
+
+  const first: { label: string; prompt: string } = worst
+    ? {
+        label: `Fix ${worst.category}`,
+        prompt: `The part has a ${worst.category} issue: "${worst.issue}". Recommendation: "${worst.recommendation}". Propose a concrete fix using the propose_design_change tool.`,
+      }
+    : {
+        label: 'Suggest improvements',
+        prompt:
+          "Look at the current part and propose 2-3 specific changes that would improve moldability or cost. Use the propose_design_change tool — don't just describe.",
+      }
+
+  return [
+    first,
+    {
+      label: 'Reduce cost',
+      prompt: 'What single change would most reduce the per-part cost without hurting quality? Propose it.',
+    },
+    {
+      label: 'Find shops',
+      prompt: "I'm in 49503. Which local shops could build this part? Use the find_local_shops tool.",
+    },
+    {
+      label: 'New part',
+      prompt: 'Make me a new part — a [describe what you want].',
+    },
+  ]
+}
+
+/** Generates up to 3 DesignProposal cards from live DFM issues without
+ *  an AI round-trip. Each proposal maps to a concrete DesignChange so
+ *  the user can accept it immediately. Falls back to scale/material
+ *  suggestions when no actionable issues exist. */
+function generateRuleBasedSuggestions(
+  issues: IssueHint[],
+  sp: {
+    wallThickness: number
+    minDraftAngle: number
+    numCavities: number
+    productionQuantity: number
+    material: string
+    partLength: number
+    partWidth: number
+    partHeight: number
   },
-  {
-    label: 'Reduce cost',
-    prompt:
-      'What single change would most reduce the per-part cost without hurting quality? Propose it.',
-  },
-  {
-    label: 'Find shops nearby',
-    prompt:
-      "I'm in 49503. Which local shops could build this part? Use the find_local_shops tool.",
-  },
-  {
-    label: 'New part',
-    prompt: 'Make me a new part — a [describe what you want].',
-  },
-]
+): DesignProposal[] {
+  const out: DesignProposal[] = []
+  let n = Date.now()
+  const uid = () => `rule-${n++}`
+
+  const wallIssue = issues.find((i) => i.category === 'Wall Thickness')
+  if (wallIssue) {
+    if (wallIssue.issue.toLowerCase().includes('thin')) {
+      out.push({
+        id: uid(),
+        title: 'Increase wall thickness',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: Math.max(1.2, sp.wallThickness * 1.5) }],
+        status: 'pending',
+      })
+    } else if (wallIssue.issue.toLowerCase().includes('thick')) {
+      out.push({
+        id: uid(),
+        title: 'Core out thick walls',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: Math.min(sp.wallThickness * 0.75, 4.5) }],
+        status: 'pending',
+      })
+    } else {
+      out.push({
+        id: uid(),
+        title: 'Optimize wall thickness',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: 2.5 }],
+        status: 'pending',
+      })
+    }
+  }
+
+  const draftIssue = issues.find((i) => i.category === 'Draft Angle')
+  if (draftIssue) {
+    out.push({
+      id: uid(),
+      title: 'Increase draft angle',
+      rationale: draftIssue.recommendation,
+      changes: [{ field: 'minDraftAngle', value: Math.max(2, sp.minDraftAngle + 1.5) }],
+      status: 'pending',
+    })
+  }
+
+  const sizeIssue = issues.find((i) => i.category === 'Part Size')
+  if (sizeIssue && out.length < 3) {
+    out.push({
+      id: uid(),
+      title: 'Reduce part dimensions',
+      rationale: sizeIssue.recommendation,
+      changes: [
+        { field: 'partLength', value: Math.round(sp.partLength * 0.75) },
+        { field: 'partWidth', value: Math.round(sp.partWidth * 0.75) },
+      ],
+      status: 'pending',
+    })
+  }
+
+  const hasCostlyComplexity = issues.some(
+    (i) =>
+      ['Undercuts', 'Corner Radii', 'Wall Uniformity', 'Aspect Ratio'].includes(i.category) &&
+      i.severity !== 'info',
+  )
+  if (hasCostlyComplexity && out.length < 3) {
+    out.push({
+      id: uid(),
+      title: 'Scale production to offset tooling cost',
+      rationale:
+        'Geometric complexity raises tooling costs. Increasing cavity count and production volume spreads the fixed cost, reducing per-part price.',
+      changes: [
+        { field: 'numCavities', value: Math.max(sp.numCavities, 2) },
+        { field: 'productionQuantity', value: Math.max(sp.productionQuantity, 50000) },
+      ],
+      status: 'pending',
+    })
+  }
+
+  // Fallbacks for well-optimized parts
+  if (out.length === 0) {
+    if (sp.numCavities < 4) {
+      out.push({
+        id: uid(),
+        title: 'Scale up production',
+        rationale:
+          'The part is well-optimized for molding. Adding cavities reduces per-part cost by running multiple parts per cycle.',
+        changes: [
+          { field: 'numCavities', value: 4 },
+          { field: 'productionQuantity', value: 100000 },
+        ],
+        status: 'pending',
+      })
+    }
+    out.push({
+      id: uid(),
+      title: sp.material !== 'ABS' ? 'Upgrade to ABS' : 'Switch to PP for lower cost',
+      rationale:
+        sp.material !== 'ABS'
+          ? 'With strong moldability, upgrading to ABS adds impact resistance and a better surface finish without redesign.'
+          : 'Polypropylene offers excellent chemical resistance at a lower material cost than ABS, with good moldability for this geometry.',
+      changes: [{ field: 'material', value: sp.material !== 'ABS' ? 'ABS' : 'PP' }],
+      status: 'pending',
+    })
+  }
+
+  return out.slice(0, 3)
+}
 
 export function AIAssistantPanel() {
   const [message, setMessage] = useState('')
@@ -142,6 +275,8 @@ export function AIAssistantPanel() {
 
   const setAnalysis = useResultsStore((s) => s.setAnalysis)
 
+  const { issues: liveIssues } = useLiveDfmScore()
+
   // Dynamic suggestion-card state lives in useAppStore so the
   // Toolbar's AI Suggestions ribbon can show the same list without a
   // duplicate fetch. The panel + the ribbon both read aiPartSuggestions
@@ -149,8 +284,6 @@ export function AIAssistantPanel() {
   const suggestions = aiPartSuggestions.items
   const suggestionsLoading = aiPartSuggestions.loading
   const suggestionsError = aiPartSuggestions.error
-  // Guard the on-mount fetch so React StrictMode's double-invoke (or a
-  // currentPartId effect re-fire) doesn't trigger two concurrent calls.
   const suggestionsFetchedFor = useRef<string | null>(null)
 
   // Friendly part identity for the AI context. partsLibrary has hero
@@ -162,79 +295,25 @@ export function AIAssistantPanel() {
     : partEntry?.partName ?? currentPartId
   const partSummary = uploadedSTL ? undefined : partEntry?.partSummary
 
-  // Snapshot the live part state into the AI context payload. Memoized
-  // via the explicit dep list rather than useMemo since it's only
-  // built at call-time inside sendMessage / fetchSuggestions.
-  const buildContext = useCallback(
-    () => ({
-      partId: currentPartId,
-      partName,
-      partSummary,
-      material: simulationParams.material,
-      wallThickness: simulationParams.wallThickness,
-      minDraftAngle: simulationParams.minDraftAngle,
-      partLength: simulationParams.partLength,
-      partWidth: simulationParams.partWidth,
-      partHeight: simulationParams.partHeight,
-      numUndercuts: simulationParams.numUndercuts,
-    }),
-    [currentPartId, partName, partSummary, simulationParams],
+  // Memoize the DFM issue list so the callback below only changes when
+  // the actual issue content changes, not on every render.
+  const issueKey = useMemo(
+    () => liveIssues.map((i) => `${i.category}:${i.severity}`).join('|'),
+    [liveIssues],
   )
 
-  const fetchSuggestions = useCallback(async () => {
-    setAiPartSuggestions({
-      partId: currentPartId,
-      loading: true,
-      error: null,
-    })
-    try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Generate 2-3 distinct design optimizations for the current part. Each one should target a different angle (e.g. moldability, cost, material). Return them as separate propose_design_change tool calls.',
-            },
-          ],
-          context: buildContext(),
-          intent: 'suggestions',
-        }),
-      })
-      const data = (await res.json()) as {
-        proposals?: DesignProposal[]
-        proposal?: DesignProposal
-        error?: string
-      }
-      if (!res.ok) {
-        setAiPartSuggestions({
-          loading: false,
-          error: data.error ?? `HTTP ${res.status}`,
-          items: [],
-        })
-        return
-      }
-      // Model may collapse to a single proposal; accept either shape.
-      const next = data.proposals ?? (data.proposal ? [data.proposal] : [])
-      setAiPartSuggestions({ loading: false, error: null, items: next })
-    } catch (err) {
-      setAiPartSuggestions({
-        loading: false,
-        error: err instanceof Error ? err.message : 'Network error',
-        items: [],
-      })
-    }
-  }, [buildContext, currentPartId, setAiPartSuggestions])
+  const refreshSuggestions = useCallback(() => {
+    const proposals = generateRuleBasedSuggestions(liveIssues, simulationParams)
+    setAiPartSuggestions({ partId: currentPartId, loading: false, error: null, items: proposals })
+  }, [liveIssues, simulationParams, currentPartId, setAiPartSuggestions])
 
-  // Fetch one set of suggestions per part. Switching parts re-fetches;
-  // edits within the same part don't (user can hit Regenerate).
+  // Generate one set of suggestions per part. Switching parts regenerates;
+  // param edits within the same part don't (user can hit Regenerate).
   useEffect(() => {
     if (suggestionsFetchedFor.current === currentPartId) return
     suggestionsFetchedFor.current = currentPartId
-    void fetchSuggestions()
-  }, [currentPartId, fetchSuggestions])
+    refreshSuggestions()
+  }, [currentPartId, issueKey, refreshSuggestions])
 
   const handleAcceptSuggestion = (proposal: DesignProposal) => {
     const patch: Record<string, number | string> = {}
@@ -521,7 +600,10 @@ export function AIAssistantPanel() {
           </div>
           <button
             type="button"
-            onClick={() => void fetchSuggestions()}
+            onClick={() => {
+              suggestionsFetchedFor.current = null
+              refreshSuggestions()
+            }}
             disabled={suggestionsLoading}
             title="Regenerate optimizations"
             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded disabled:opacity-40"
@@ -605,7 +687,7 @@ export function AIAssistantPanel() {
           </button>
         </div>
         <div className="flex gap-2 mt-2">
-          {QUICK_PROMPTS.map((q) => (
+          {buildDynamicQuickPrompts(liveIssues).map((q) => (
             <button
               key={q.label}
               onClick={() => void sendMessage(q.prompt)}

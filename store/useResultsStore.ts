@@ -344,9 +344,9 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
           },
           {
             label: 'Fill time',
-            value: `${results.filling.fill_time.toFixed(1)}s`,
+            value: `${results.filling.estimated_fill_time.toFixed(1)}s`,
             description:
-              results.filling.fill_ratio >= 0.95
+              results.filling.flow_ratio >= 0.95
                 ? 'Part fills completely.'
                 : 'Potential short-shot risk.',
           },
