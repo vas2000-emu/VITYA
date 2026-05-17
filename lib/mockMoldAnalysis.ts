@@ -55,7 +55,7 @@ const bracket: MoldAnalysisResult = {
       scoreImpact: '+26',
       beforeScore: 56,
       afterScore: 82,
-      hotspot: { top: '47%', left: '74%', label: 'Undercut' },
+      hotspot: { top: '31%', left: '28%', label: 'Undercut' },
       region: { min: [-52, 18, -16], max: [-36, 30, 16] }, // snap-fit hook box
     },
     {
@@ -71,7 +71,7 @@ const bracket: MoldAnalysisResult = {
       scoreImpact: '+18',
       beforeScore: 56,
       afterScore: 74,
-      hotspot: { top: '40%', left: '40%', label: 'Draft' },
+      hotspot: { top: '48%', left: '18%', label: 'Draft' },
       region: { min: [-62, -14, -46], max: [-46, 34, 46] }, // vertical wall
     },
     {
@@ -87,7 +87,7 @@ const bracket: MoldAnalysisResult = {
       scoreImpact: '+14',
       beforeScore: 56,
       afterScore: 70,
-      hotspot: { top: '68%', left: '22%', label: 'Thin wall' },
+      hotspot: { top: '58%', left: '32%', label: 'Thin wall' },
       region: { min: [-21, -10, -8], max: [-9, 14, 8] }, // rib region
     },
   ],
@@ -303,7 +303,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+8',
       beforeScore: 38,
       afterScore: 46,
-      hotspot: { top: '64%', left: '24%', label: 'Knit L' },
+      hotspot: { top: '50%', left: '25%', label: 'Knit L' },
       region: { min: [-82, -12, 18], max: [-62, -1, 28] },
     },
     {
@@ -319,7 +319,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+7',
       beforeScore: 38,
       afterScore: 45,
-      hotspot: { top: '64%', left: '76%', label: 'Knit R' },
+      hotspot: { top: '50%', left: '75%', label: 'Knit R' },
       region: { min: [62, -12, 18], max: [82, -1, 28] },
     },
     {
@@ -335,7 +335,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+9',
       beforeScore: 38,
       afterScore: 47,
-      hotspot: { top: '18%', left: '50%', label: 'Sink' },
+      hotspot: { top: '31%', left: '50%', label: 'Sink' },
       region: { min: [-75, 11, 18], max: [75, 16, 28] },
     },
     {
@@ -351,7 +351,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+5',
       beforeScore: 38,
       afterScore: 43,
-      hotspot: { top: '40%', left: '50%', label: 'Weld' },
+      hotspot: { top: '49%', left: '50%', label: 'Weld' },
       region: { min: [-30, -2, 23], max: [30, 11, 27] },
     },
     {
@@ -367,7 +367,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+7',
       beforeScore: 38,
       afterScore: 45,
-      hotspot: { top: '78%', left: '50%', label: 'Undercut' },
+      hotspot: { top: '72%', left: '50%', label: 'Undercut' },
       region: { min: [-70, -5, -25], max: [70, 4, -18] },
     },
     {
@@ -383,7 +383,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+4',
       beforeScore: 38,
       afterScore: 42,
-      hotspot: { top: '50%', left: '8%', label: 'Draft L' },
+      hotspot: { top: '54%', left: '9%', label: 'Draft L' },
       region: { min: [-110, -16, -15], max: [-82, 16, 8] },
     },
     {
@@ -398,7 +398,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+4',
       beforeScore: 38,
       afterScore: 42,
-      hotspot: { top: '50%', left: '92%', label: 'Draft R' },
+      hotspot: { top: '54%', left: '91%', label: 'Draft R' },
       region: { min: [82, -16, -15], max: [110, 16, 8] },
     },
     {
@@ -414,7 +414,7 @@ const bumper: MoldAnalysisResult = {
       scoreImpact: '+4',
       beforeScore: 38,
       afterScore: 42,
-      hotspot: { top: '50%', left: '50%', label: 'Thin' },
+      hotspot: { top: '32%', left: '50%', label: 'Thin' },
       region: { min: [-15, -4, 23], max: [15, -1, 26] },
     },
   ],

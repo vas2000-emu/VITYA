@@ -15,6 +15,8 @@ import {
 import { useAppStore } from '@/store/useAppStore'
 import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
 import { runFullAnalysis } from '@/lib/moldsim-api'
+import { generateCustomPartReport } from '@/lib/aiReport'
+import { useResultsStore } from '@/store/useResultsStore'
 import type {
   ChatMessage,
   CustomPartSpec,
@@ -137,6 +139,8 @@ export function AIAssistantPanel() {
     setAiPartSuggestions,
     patchAiPartSuggestion,
   } = useAppStore()
+
+  const setAnalysis = useResultsStore((s) => s.setAnalysis)
 
   // Dynamic suggestion-card state lives in useAppStore so the
   // Toolbar's AI Suggestions ribbon can show the same list without a
@@ -385,6 +389,24 @@ export function AIAssistantPanel() {
         isLoading: false,
         error: null,
       })
+
+      // Fire the rich-text report generator in the background. The
+      // dashboard's MoldAnalysisResult gets replaced with AI-written
+      // issues so the user can read concrete fixes in plain English
+      // instead of seeing the previously-loaded demo part's content.
+      const report = await generateCustomPartReport({
+        partId,
+        partName: spec.label,
+        partDescription: spec.description,
+        material: spec.material,
+        partLength: spec.partLength,
+        partWidth: spec.partWidth,
+        partHeight: spec.partHeight,
+        wallThickness: spec.wallThickness,
+        minDraftAngle: 2,
+        results,
+      })
+      if (report) setAnalysis(report)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to analyze new part'
       setSimulationResults({ isLoading: false, error: msg })

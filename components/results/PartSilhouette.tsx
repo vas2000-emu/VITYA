@@ -22,8 +22,38 @@ export function PartSilhouette({ partId }: { partId: PartId }) {
     case 'bumper':
       return <BumperSilhouette />
     default:
-      return null
+      // AI-generated / uploaded parts don't have a hand-drawn
+      // silhouette. Show a neutral placeholder so the hotspots still
+      // have a backdrop instead of an empty pane.
+      return <CustomPartSilhouette />
   }
+}
+
+function CustomPartSilhouette() {
+  return (
+    <svg
+      viewBox="0 0 400 300"
+      className="absolute inset-0 w-full h-full"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <Defs />
+      <GridFloor />
+      <ellipse cx="200" cy="252" rx="160" ry="6" fill="#000" opacity="0.25" />
+      <rect
+        x="80"
+        y="80"
+        width="240"
+        height="160"
+        rx="14"
+        fill="url(#partFill)"
+        stroke="url(#partEdge)"
+        strokeWidth="1.5"
+      />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="170" textAnchor="middle">Custom part</text>
+      </g>
+    </svg>
+  )
 }
 
 function GridFloor() {

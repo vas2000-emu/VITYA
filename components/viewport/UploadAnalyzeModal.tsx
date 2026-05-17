@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
+import { useResultsStore } from '@/store/useResultsStore'
 import { runFullAnalysis } from '@/lib/moldsim-api'
+import { generateCustomPartReport } from '@/lib/aiReport'
 import { ALLOWED_MATERIALS } from '@/lib/types'
 
 /** Watches useAppStore.pendingUploadAnalysis. When an STL load
@@ -35,6 +37,7 @@ export function UploadAnalyzeModal() {
   const updateParameterValue = useAppStore((s) => s.updateParameterValue)
   const setCurrentPartId = useAppStore((s) => s.setCurrentPartId)
   const addUserPart = useAppStore((s) => s.addUserPart)
+  const setAnalysis = useResultsStore((s) => s.setAnalysis)
 
   const [unit, setUnit] = useState<Unit>('mm')
   const [material, setMaterial] = useState<string>('ABS')
@@ -131,12 +134,15 @@ export function UploadAnalyzeModal() {
       // Register the uploaded STL as a switchable entry in the parts
       // sidebar / ribbon. Skip if no STL URL is currently set (modal
       // could in theory be open with a stale bbox after a clear).
+      let registeredPartId: string | null = null
+      let registeredLabel: string | null = null
       if (uploadedSTL) {
-        const partId = `user-${Date.now()}`
+        registeredPartId = `user-${Date.now()}`
+        registeredLabel = `Uploaded STL (${new Date().toLocaleTimeString()})`
         addUserPart({
-          id: partId,
+          id: registeredPartId,
           kind: 'uploaded',
-          label: `Uploaded STL (${new Date().toLocaleTimeString()})`,
+          label: registeredLabel,
           stlUrl: uploadedSTL,
           partLength: lenMm,
           partWidth: widMm,
@@ -145,7 +151,7 @@ export function UploadAnalyzeModal() {
           material,
           createdAt: Date.now(),
         })
-        setCurrentPartId(partId)
+        setCurrentPartId(registeredPartId)
       }
 
       // 2) Hit the moldsim API directly with the inputs we just built.
@@ -182,6 +188,25 @@ export function UploadAnalyzeModal() {
       })
       toast.success('Analysis updated for uploaded part')
       setPending(false)
+
+      // Background: generate a rich-text report so the dashboard
+      // shows AI-written issues instead of the previously-loaded
+      // demo part's content. Runs after the modal closes so the user
+      // gets immediate feedback; the report fills in when ready.
+      if (registeredPartId && registeredLabel) {
+        const report = await generateCustomPartReport({
+          partId: registeredPartId,
+          partName: registeredLabel,
+          material,
+          partLength: lenMm,
+          partWidth: widMm,
+          partHeight: heiMm,
+          wallThickness: wallMm,
+          minDraftAngle: draftDeg,
+          results,
+        })
+        if (report) setAnalysis(report)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to analyze upload'
       setSimulationResults({ isLoading: false, error: message })
