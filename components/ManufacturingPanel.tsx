@@ -38,6 +38,7 @@ export function ManufacturingPanel() {
     simulationResults,
     setSimulationResults,
     currentPartId,
+    userParts,
   } = useAppStore()
 
   // Live DFM data — derived synchronously from simulationParams so any
@@ -46,13 +47,21 @@ export function ManufacturingPanel() {
   // still live in simulationResults because they require API calls.
   const live = useLiveDfmScore()
 
+  // For AI/uploaded parts, prefer the real API result over the local
+  // synchronous check (which uses hardcoded ideal params → 100/100).
+  const isUserPart = userParts.some((p) => p.id === currentPartId)
+  const apiDfm = isUserPart ? simulationResults.dfm : null
+  const displayScore = apiDfm != null ? Math.round(apiDfm.overall_score) : live.score
+  const displayIssues = (apiDfm ? apiDfm.issues : live.issues) as typeof live.issues
+  const displaySummary = apiDfm ? apiDfm.summary : live.summary
+
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false)
 
-  const errorCount = live.issues.filter((i) => i.severity === 'critical').length
-  const warningCount = live.issues.filter((i) => i.severity === 'warning').length
-  const infoCount = live.issues.filter((i) => i.severity === 'info').length
+  const errorCount = displayIssues.filter((i) => i.severity === 'critical').length
+  const warningCount = displayIssues.filter((i) => i.severity === 'warning').length
+  const infoCount = displayIssues.filter((i) => i.severity === 'info').length
 
   /** Run the four moldsim endpoints in parallel and stash the responses
    *  in simulationResults. Field names match the actual request shapes
@@ -272,14 +281,14 @@ export function ManufacturingPanel() {
             <div className="text-zinc-400">Moldability score</div>
             <div
               className={`font-medium ${
-                live.score >= 70
+                displayScore >= 70
                   ? 'text-emerald-400'
-                  : live.score >= 50
+                  : displayScore >= 50
                     ? 'text-amber-400'
                     : 'text-rose-400'
               }`}
             >
-              {live.score}/100
+              {displayScore}/100
             </div>
           </div>
           {simulationResults.cost && (
@@ -316,16 +325,16 @@ export function ManufacturingPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {live.issues.length === 0 ? (
+        {displayIssues.length === 0 ? (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200 flex items-start gap-3">
             <CheckCircle2 className="size-4 mt-0.5 shrink-0" />
             <div>
               <div className="font-medium">No moldability issues at current settings.</div>
-              <div className="text-xs text-emerald-300/80 mt-1">{live.summary}</div>
+              <div className="text-xs text-emerald-300/80 mt-1">{displaySummary}</div>
             </div>
           </div>
         ) : (
-          live.issues.map((issue, idx) => (
+          displayIssues.map((issue, idx) => (
             <div
               key={`${issue.category}-${idx}`}
               className={`border rounded-lg overflow-hidden ${severityBg[issue.severity]}`}
