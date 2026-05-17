@@ -49,7 +49,7 @@ export function SimulationStatusHud() {
         : CheckCircle2
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 flex items-stretch gap-2">
+    <div className="absolute bottom-14 right-4 z-10 flex items-stretch gap-2">
       <div className="flex items-center gap-3 px-3 py-2 text-[11px] rounded-lg border border-zinc-800 bg-zinc-900/85 backdrop-blur text-zinc-300">
         <StatBit label="Wall" value={`${(sp.wallThickness / 25.4).toFixed(3)} in`} />
         <StatBit label="Draft" value={`${sp.minDraftAngle.toFixed(1)}°`} />
