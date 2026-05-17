@@ -71,6 +71,13 @@ Answer in 2-3 sentences of plain English unless the user asks for more detail.`
  *  result as a row of independent suggestion cards. */
 const SUGGESTIONS_ADDENDUM = `\n\nYou are being asked to generate a panel of design optimizations, not to chat. Emit 2-3 SEPARATE propose_design_change tool calls covering DIFFERENT angles (e.g. one for moldability, one for cost, one for material). Each call should be self-contained with its own title and rationale. Do not produce conversational text alongside the tool calls — the panel only renders the proposals.`
 
+interface DfmIssueHint {
+  severity: string
+  category: string
+  issue: string
+  recommendation: string
+}
+
 interface PartContext {
   partId?: string
   partName?: string
@@ -82,6 +89,8 @@ interface PartContext {
   partWidth?: number
   partHeight?: number
   numUndercuts?: number
+  dfmIssues?: DfmIssueHint[]
+  dfmScore?: number
 }
 
 interface ChatRequestBody {
@@ -122,6 +131,22 @@ function buildSystemPrompt(ctx: PartContext | undefined, intent?: 'chat' | 'sugg
   if (params.length > 0) {
     const bullets = params.map((l) => '- ' + l).join('\n')
     sections.push(`Current parameter values:\n${bullets}`)
+  }
+  if (ctx.dfmScore !== undefined || (ctx.dfmIssues && ctx.dfmIssues.length > 0)) {
+    const lines: string[] = []
+    if (ctx.dfmScore !== undefined) lines.push(`Overall moldability score: ${ctx.dfmScore}/100`)
+    if (ctx.dfmIssues && ctx.dfmIssues.length > 0) {
+      const issueLines = ctx.dfmIssues
+        .filter((i) => i.severity !== 'info')
+        .map((i) => `  [${i.severity.toUpperCase()}] ${i.category}: ${i.issue} — ${i.recommendation}`)
+      if (issueLines.length > 0) {
+        lines.push('Active DFM issues:')
+        lines.push(...issueLines)
+      } else {
+        lines.push('No active DFM issues — part is well-optimized for molding.')
+      }
+    }
+    sections.push(lines.join('\n'))
   }
   return sections.join('\n\n') + addendum
 }

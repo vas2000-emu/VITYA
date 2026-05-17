@@ -232,6 +232,8 @@ interface AppState {
   ) => void
   /** Update a single suggestion's status in-place (accepted / rejected). */
   patchAiPartSuggestion: (id: string, patch: Partial<DesignProposal>) => void
+  /** Apply a proposal's changes to simulationParams + the Parameters panel. */
+  applyDesignProposal: (proposal: DesignProposal) => void
 
   // Flag flipped to true when an STL load completes; UploadAnalyzeModal
   // watches this and opens. Reset to false once the modal is dismissed
@@ -473,6 +475,38 @@ export const useAppStore = create<AppState>((set) => ({
         ),
       },
     })),
+  applyDesignProposal: (proposal) =>
+    set((s) => {
+      const FIELD_TO_PARAM: Partial<Record<string, string>> = {
+        wallThickness: 'p-wall',
+        minDraftAngle: 'p-draft',
+        partLength: 'p-len',
+        partWidth: 'p-wid',
+        partHeight: 'p-height',
+      }
+      const patch: Partial<SimulationParams> = {}
+      for (const change of proposal.changes) {
+        (patch as Record<string, number | string>)[change.field] = change.value
+      }
+      const updatedParameters = s.parameters.map((p) => {
+        for (const change of proposal.changes) {
+          if (FIELD_TO_PARAM[change.field] === p.id && typeof change.value === 'number') {
+            return { ...p, value: change.value }
+          }
+        }
+        return p
+      })
+      return {
+        simulationParams: deriveScaledSimParams(s.simulationParams, patch, s.simulationBaseline),
+        parameters: updatedParameters,
+        aiPartSuggestions: {
+          ...s.aiPartSuggestions,
+          items: s.aiPartSuggestions.items.map((item) =>
+            item.id === proposal.id ? { ...item, status: 'accepted' as const } : item,
+          ),
+        },
+      }
+    }),
   pendingUploadAnalysis: false,
   setPendingUploadAnalysis: (pending) => set({ pendingUploadAnalysis: pending }),
 

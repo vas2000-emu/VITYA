@@ -57,12 +57,13 @@ export function Mold({ partBox }: MoldProps) {
       const coreCenter: [number, number, number] = [center.x, partingY - halfY / 2, center.z]
       const blockSize: [number, number, number] = [padded.x, halfY, padded.z]
 
-      // Gate at the front-right of the cavity face, halfway between
-      // parting plane and the top of the cavity. Visible from default
-      // isometric camera angle.
+      // Gate sits on the parting line at the side face — this is the
+      // standard "edge gate" position used in most injection molds.
+      // Parting plane is Y = partingY; gate is just above it so it's
+      // visible against the cavity block face.
       const gateAnchor: [number, number, number] = [
         center.x + padded.x / 2,
-        partingY + halfY / 3,
+        partingY + 2,
         center.z,
       ]
 

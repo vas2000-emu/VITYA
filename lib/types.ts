@@ -85,9 +85,11 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
-  /** Optional inline proposal rendered as an action card next to the
-   *  assistant's text. Only ever set on assistant messages. */
+  /** Single inline proposal (AI returned one propose_design_change call). */
   proposal?: DesignProposal
+  /** Multiple proposals when the AI made several propose_design_change
+   *  calls in one turn (e.g. user asked "suggest improvements"). */
+  proposals?: DesignProposal[]
 }
 
 // ---------------------------------------------------------------------------

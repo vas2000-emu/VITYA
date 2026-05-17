@@ -48,6 +48,8 @@ export function Toolbar() {
     setCurrentPartId,
     setUploadedSTL,
     uploadedSTL,
+    setCustomPartSpec,
+    applyDesignProposal,
   } = useAppStore()
 
   const handleToggleManufacturing = () => {
@@ -121,8 +123,8 @@ export function Toolbar() {
               currentPartId={currentPartId as PartId}
               uploadedSTL={uploadedSTL}
               onSelectPart={(id) => {
-                setUploadedSTL(null)
-                setCurrentPartId(id)
+                setCustomPartSpec(null)
+                useResultsStore.getState().selectPart(id)
                 toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
               }}
               onUploadClick={handleUploadClick}
@@ -134,6 +136,7 @@ export function Toolbar() {
             <MarkupRibbon
               suggestions={aiPartSuggestions.items}
               loading={aiPartSuggestions.loading}
+              onAccept={applyDesignProposal}
               onPreview={() => {
                 setRightPanel('ai')
                 setRightCollapsed(false)
@@ -264,10 +267,12 @@ function PartRibbon({
 function MarkupRibbon({
   suggestions,
   loading,
+  onAccept,
   onPreview,
 }: {
   suggestions: DesignProposal[]
   loading: boolean
+  onAccept: (proposal: DesignProposal) => void
   onPreview: () => void
 }) {
   return (
@@ -279,7 +284,7 @@ function MarkupRibbon({
       )}
       {!loading && suggestions.length === 0 && (
         <span className="text-xs text-zinc-500 px-3 py-3 self-center">
-          No optimizations yet — open the AI panel to generate some
+          Ask the AI to suggest improvements — they&apos;ll appear here
         </span>
       )}
       {suggestions.map((s) => (
@@ -288,7 +293,13 @@ function MarkupRibbon({
           icon={Sparkles}
           label={s.title}
           active={s.status === 'accepted'}
-          onClick={() => onPreview()}
+          onClick={() => {
+            if (s.status === 'pending') {
+              onAccept(s)
+            } else {
+              onPreview()
+            }
+          }}
         />
       ))}
     </RibbonGroup>
