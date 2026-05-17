@@ -108,35 +108,35 @@ export function Toolbar() {
 
       {/* Ribbon row — content driven by the active tab. */}
       <div className="flex items-stretch border-t border-zinc-800 bg-zinc-950/40 min-h-[88px]">
-        {activeTab === 'Part' && (
-          <PartRibbon
-            currentPartId={currentPartId as PartId}
-            uploadedSTL={uploadedSTL}
-            onSelectPart={(id) => {
-              setUploadedSTL(null)
-              setCurrentPartId(id)
-              toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
-            }}
-            onUploadClick={handleUploadClick}
-            onClearUpload={handleClearUpload}
-          />
-        )}
-        {activeTab === 'Evaluate' && <EvaluateRibbon />}
-        {activeTab === 'AI optimizations' && (
-          <MarkupRibbon
-            suggestions={aiPartSuggestions.items}
-            loading={aiPartSuggestions.loading}
-            onPreview={() => {
-              // Surface the AI panel so the user sees the full card +
-              // can Accept / Reject. The proposals shown in the ribbon
-              // are the same data as the panel's "Suggested optimizations".
-              setRightPanel('ai')
-              setRightCollapsed(false)
-            }}
-          />
-        )}
+        {/* Scrollable part — grows and scrolls so many AI parts never push demo buttons off-screen */}
+        <div className="flex-1 flex items-stretch overflow-x-auto min-w-0">
+          {activeTab === 'Part' && (
+            <PartRibbon
+              currentPartId={currentPartId as PartId}
+              uploadedSTL={uploadedSTL}
+              onSelectPart={(id) => {
+                setUploadedSTL(null)
+                setCurrentPartId(id)
+                toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
+              }}
+              onUploadClick={handleUploadClick}
+              onClearUpload={handleClearUpload}
+            />
+          )}
+          {activeTab === 'Evaluate' && <EvaluateRibbon />}
+          {activeTab === 'AI optimizations' && (
+            <MarkupRibbon
+              suggestions={aiPartSuggestions.items}
+              loading={aiPartSuggestions.loading}
+              onPreview={() => {
+                setRightPanel('ai')
+                setRightCollapsed(false)
+              }}
+            />
+          )}
+        </div>
 
-        {/* Persistent global actions — rendered as the rightmost ribbon group */}
+        {/* Persistent global actions — pinned to the right, never scrolled away */}
         <RibbonGroup bordered>
           <RibbonButton
             onClick={handleToggleManufacturing}
