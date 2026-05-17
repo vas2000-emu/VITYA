@@ -13,6 +13,7 @@ const paramToSimulationKey: Record<string, keyof import('@/store/useAppStore').S
   'p-draft': 'minDraftAngle',
   'p-len': 'partLength',
   'p-wid': 'partWidth',
+  'p-height': 'partHeight',
 }
 
 export function ParameterPanel() {

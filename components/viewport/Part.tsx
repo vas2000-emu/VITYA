@@ -10,6 +10,7 @@ import { useResultsStore } from '@/store/useResultsStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import { getPartGeometry, type PartId } from './partGeometry'
 import { useDebouncedGeometryParams } from './useDebouncedGeometryParams'
+import { MoldCheckerMaterial } from './MoldCheckerMaterial'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
 
 const SEVERITY_HEX: Record<MoldIssueSeverity, string> = {
@@ -234,22 +235,32 @@ export function Part() {
     selectIssue(hover.issue.id)
   }
 
-  // Mold mode 'mold' hides the part entirely so the mold blocks read.
-  // 'both' shows both: part is still solid, mold blocks are translucent.
-  const partVisible = moldMode !== 'mold'
+  // When the mold is visible (either translucent overlay or opaque
+  // tooling view), swap to the UV-checker placeholder so the part reads
+  // as "this is the cavity volume" rather than a finished surface. The
+  // DFM heatmap material returns when moldMode is 'part'.
+  const showChecker = moldMode !== 'part'
 
   return (
     <>
-      {partVisible && (
-        <mesh
-          ref={meshRef}
-          geometry={geometry}
-          castShadow
-          receiveShadow
-          onPointerMove={handlePointerMove}
-          onPointerOut={handlePointerOut}
-          onClick={handleClick}
-        >
+      <mesh
+        ref={meshRef}
+        geometry={geometry}
+        castShadow
+        receiveShadow
+        onPointerMove={handlePointerMove}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
+      >
+        {showChecker ? (
+          <MoldCheckerMaterial
+            stripeWidth={6}
+            duty={0.5}
+            slant={[1, 1, 0]}
+            alphaOn={0.55}
+            alphaOff={0.45}
+          />
+        ) : (
           <meshPhysicalMaterial
             vertexColors
             color={showManufacturing ? '#fca5a5' : '#ffffff'}
@@ -261,9 +272,9 @@ export function Part() {
             sheenColor="#ffffff"
             envMapIntensity={0.9}
           />
-        </mesh>
-      )}
-      {hover && partVisible && <IssueTooltip issue={hover.issue} point={hover.point} />}
+        )}
+      </mesh>
+      {hover && !showChecker && <IssueTooltip issue={hover.issue} point={hover.point} />}
     </>
   )
 }

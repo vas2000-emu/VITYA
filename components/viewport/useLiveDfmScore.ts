@@ -3,19 +3,28 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import { checkManufacturability } from '@/lib/moldsim/manufacturing'
+import type { ManufacturingCheckResponse } from '@/lib/moldsim/types'
+
+export type LiveDfmSeverity = 'critical' | 'warning' | 'info'
 
 /**
- * Synchronous DFM score derived from the current simulationParams. The
- * underlying checkManufacturability() is a pure function (no network),
- * so it can be called on every render. The Manufacturing panel still
- * fires the full `/api/moldsim` round-trip for the authoritative
- * report — this is the at-a-glance number that updates live as a
- * slider moves.
+ * Synchronous DFM score + issues derived from the current
+ * simulationParams. checkManufacturability() is a pure function (no
+ * network) so we can call it on every render — the HUD pill, the
+ * Manufacturing panel, and anything else that needs an at-a-glance
+ * score consume this so every surface stays in lockstep with the
+ * Parameters / Simulation Settings panels.
+ *
+ * The Manufacturing panel still has a "Re-run Analysis" button — that
+ * one fires the cost / cooling / filling round-trips (which DO need
+ * the API). DFM is local.
  */
 export function useLiveDfmScore(): {
   score: number
   issueCount: number
-  worstSeverity: 'critical' | 'warning' | 'info' | null
+  worstSeverity: LiveDfmSeverity | null
+  issues: ManufacturingCheckResponse['issues']
+  summary: string
 } {
   const sp = useAppStore((s) => s.simulationParams)
 
@@ -29,10 +38,11 @@ export function useLiveDfmScore(): {
       has_uniform_wall: sp.hasUniformWall,
       part_length: sp.partLength,
       part_width: sp.partWidth,
+      part_height: sp.partHeight,
     })
 
-    const sevOrder: Array<'critical' | 'warning' | 'info'> = ['critical', 'warning', 'info']
-    let worst: 'critical' | 'warning' | 'info' | null = null
+    const sevOrder: LiveDfmSeverity[] = ['critical', 'warning', 'info']
+    let worst: LiveDfmSeverity | null = null
     for (const sev of sevOrder) {
       if (res.issues.some((i) => i.severity === sev)) {
         worst = sev
@@ -44,6 +54,8 @@ export function useLiveDfmScore(): {
       score: res.overall_score,
       issueCount: res.issues.length,
       worstSeverity: worst,
+      issues: res.issues,
+      summary: res.summary,
     }
   }, [
     sp.wallThickness,
@@ -54,5 +66,6 @@ export function useLiveDfmScore(): {
     sp.hasUniformWall,
     sp.partLength,
     sp.partWidth,
+    sp.partHeight,
   ])
 }

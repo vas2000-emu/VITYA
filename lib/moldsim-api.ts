@@ -120,6 +120,7 @@ export interface FullAnalysisRequest {
   projected_area: number;
   part_length: number;
   part_width: number;
+  part_height: number;
   melt_temp: number;
   mold_temp: number;
   production_quantity: number;
@@ -170,6 +171,7 @@ export async function runFullAnalysis(
       has_uniform_wall: params.has_uniform_wall,
       part_length: params.part_length,
       part_width: params.part_width,
+      part_height: params.part_height,
       material: params.material,
     }),
     calculateFilling({

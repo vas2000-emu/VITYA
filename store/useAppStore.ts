@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type {
   AISuggestion,
   Parameter,
-  ManufacturingIssue,
   RightPanelType,
   ChatMessage,
 } from '@/lib/types'
@@ -12,6 +11,7 @@ import type {
   ManufacturingCheckResponse,
   FillingResponse,
 } from '@/lib/moldsim-api'
+import { getMaterial } from '@/lib/moldsim/materials'
 
 // Simulation state types
 export interface SimulationParams {
@@ -22,6 +22,7 @@ export interface SimulationParams {
   projectedArea: number
   partLength: number
   partWidth: number
+  partHeight: number
   meltTemp: number
   moldTemp: number
   productionQuantity: number
@@ -31,6 +32,22 @@ export interface SimulationParams {
   minDraftAngle: number
   hasSharpCorners: boolean
   hasUniformWall: boolean
+}
+
+/** Snapshot of the most recently loaded preset's dimensions, wall, and
+ *  material. updateSimulationParams uses this as the reference point
+ *  when scaling derived fields (volume/weight/projectedArea) in
+ *  response to live edits, so the demo numbers stay near the curated
+ *  baseline values when the user hasn't deviated. */
+export interface SimulationBaseline {
+  material: string
+  wallThickness: number
+  partVolume: number
+  partWeight: number
+  projectedArea: number
+  partLength: number
+  partWidth: number
+  partHeight: number
 }
 
 export interface SimulationResults {
@@ -86,59 +103,15 @@ const initialSuggestions: AISuggestion[] = [
 
 // Parameter IDs must match the keys in ParameterPanel's paramToSimulationKey
 // table so editing values syncs through to simulationParams. The geometry
-// rebuild in components/viewport/Part.tsx also keys off these IDs.
+// rebuild in components/viewport/Part.tsx also keys off these IDs. Initial
+// values track the bumper baseline (the default current part) — these get
+// overwritten by useResultsStore.selectPart() when the user switches parts.
 const initialParameters: Parameter[] = [
-  { id: 'p-len', name: 'Part Length', value: 120, unit: 'mm', locked: false },
-  { id: 'p-wid', name: 'Part Width', value: 120, unit: 'mm', locked: false },
-  { id: 'p-height', name: 'Height', value: 40, unit: 'mm', locked: false },
+  { id: 'p-len', name: 'Part Length', value: 1700, unit: 'mm', locked: false },
+  { id: 'p-wid', name: 'Part Width', value: 450, unit: 'mm', locked: false },
+  { id: 'p-height', name: 'Height', value: 380, unit: 'mm', locked: false },
   { id: 'p-draft', name: 'Draft Angle', value: 2, unit: '°', locked: false },
-  { id: 'p-wall', name: 'Wall Thickness', value: 2.5, unit: 'mm', locked: false },
-  { id: 'p-fillet', name: 'Fillet Radius', value: 2, unit: 'mm', locked: false },
-]
-
-const initialIssues: ManufacturingIssue[] = [
-  {
-    id: '1',
-    type: 'error',
-    category: 'Undercuts',
-    title: 'Undercut detected on side face',
-    description: 'Geometry prevents part ejection from mold in the current parting direction.',
-    location: 'Face 12',
-    suggestion: 'Add draft angle or modify geometry to eliminate undercut.',
-  },
-  {
-    id: '2',
-    type: 'warning',
-    category: 'Draft Angles',
-    title: 'Insufficient draft angle',
-    description: 'Draft angle is 1.5°, recommended minimum is 3° for this material.',
-    location: 'Faces 4, 5, 6, 7',
-    suggestion: 'Increase draft angle to 3° or greater.',
-  },
-  {
-    id: '3',
-    type: 'success',
-    category: 'Wall Thickness',
-    title: 'Wall thickness within range',
-    description: 'Wall thickness is 2.5mm, within recommended range (2-4mm).',
-    location: 'All walls',
-  },
-  {
-    id: '4',
-    type: 'success',
-    category: 'Draft Angles',
-    title: 'Top faces have adequate draft',
-    description: 'Draft angles on top faces range from 3° to 5°.',
-    location: 'Faces 8, 9, 10, 11',
-  },
-  {
-    id: '5',
-    type: 'info',
-    category: 'Parting Line',
-    title: 'Parting line location',
-    description: 'Recommended parting line at mid-height of part.',
-    location: 'Z = 20mm',
-  },
+  { id: 'p-wall', name: 'Wall Thickness', value: 3, unit: 'mm', locked: false },
 ]
 
 interface AppState {
@@ -158,9 +131,6 @@ interface AppState {
   toggleParameterLock: (id: string) => void
   updateParameterValue: (id: string, value: number) => void
   addParameter: () => void
-
-  // Manufacturing issues
-  manufacturingIssues: ManufacturingIssue[]
 
   // Preview mode
   previewMode: boolean
@@ -214,8 +184,10 @@ interface AppState {
 
   // Simulation state (moldsim backend)
   simulationParams: SimulationParams
+  simulationBaseline: SimulationBaseline
   simulationResults: SimulationResults
   updateSimulationParams: (params: Partial<SimulationParams>) => void
+  setSimulationBaseline: (b: SimulationBaseline) => void
   setSimulationResults: (results: Partial<SimulationResults>) => void
   resetSimulationResults: () => void
 }
@@ -234,6 +206,67 @@ const nextChatId = () => `msg-${Date.now()}-${chatIdCounter++}`
 
 let parameterIdCounter = 0
 const nextParameterId = () => `param-${Date.now()}-${parameterIdCounter++}`
+
+/** g/cm³ for a material name. melt_density is stored in kg/m³, divide by
+ *  1000 to convert. Falls back to ABS-ish density if name is unknown. */
+function densityGPerCm3(material: string): number {
+  const mat = getMaterial(material)
+  return mat ? mat.melt_density / 1000 : 1.05
+}
+
+/**
+ * Apply scaling to derived fields (partVolume / partWeight /
+ * projectedArea) whenever a dimension, wall thickness, or material
+ * changes — relative to the current simulationBaseline. Without this,
+ * editing Height in the Parameters panel would update the geometry
+ * scale and the max-size DFM check but leave cost/cooling math at the
+ * preset value.
+ *
+ * Volume scales with bbox volume × wall thickness (thin-shell proxy).
+ * Weight scales with volume × density. Projected area scales with the
+ * footprint (L × W) only — height doesn't change footprint.
+ *
+ * Anything explicitly supplied in `patch` overrides the derived value
+ * — so loading a fresh preset (which sets all four directly) still
+ * writes preset numbers verbatim.
+ */
+function deriveScaledSimParams(
+  current: SimulationParams,
+  patch: Partial<SimulationParams>,
+  baseline: SimulationBaseline,
+): SimulationParams {
+  const merged: SimulationParams = { ...current, ...patch }
+
+  const touchedDims =
+    'partLength' in patch ||
+    'partWidth' in patch ||
+    'partHeight' in patch ||
+    'wallThickness' in patch ||
+    'material' in patch
+
+  if (!touchedDims) return merged
+
+  const sizeRatio =
+    (merged.partLength * merged.partWidth * merged.partHeight) /
+    Math.max(1, baseline.partLength * baseline.partWidth * baseline.partHeight)
+  const wallRatio = merged.wallThickness / Math.max(0.01, baseline.wallThickness)
+  const footprintRatio =
+    (merged.partLength * merged.partWidth) /
+    Math.max(1, baseline.partLength * baseline.partWidth)
+  const densityRatio =
+    densityGPerCm3(merged.material) / Math.max(0.01, densityGPerCm3(baseline.material))
+
+  if (!('partVolume' in patch)) {
+    merged.partVolume = baseline.partVolume * sizeRatio * wallRatio
+  }
+  if (!('partWeight' in patch)) {
+    merged.partWeight = baseline.partWeight * sizeRatio * wallRatio * densityRatio
+  }
+  if (!('projectedArea' in patch)) {
+    merged.projectedArea = baseline.projectedArea * footprintRatio
+  }
+  return merged
+}
 
 export const useAppStore = create<AppState>((set) => ({
   // Auth state
@@ -294,9 +327,6 @@ export const useAppStore = create<AppState>((set) => ({
         },
       ],
     })),
-
-  // Manufacturing issues
-  manufacturingIssues: initialIssues,
 
   // Preview mode
   previewMode: false,
@@ -360,6 +390,7 @@ export const useAppStore = create<AppState>((set) => ({
     projectedArea: 6500,
     partLength: 1700,
     partWidth: 450,
+    partHeight: 380,
     meltTemp: 230,
     moldTemp: 50,
     productionQuantity: 50_000,

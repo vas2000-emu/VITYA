@@ -42,6 +42,7 @@ export default function UndercutAnalysisPage() {
             has_uniform_wall: simulationParams.hasUniformWall,
             part_length: simulationParams.partLength,
             part_width: simulationParams.partWidth,
+          part_height: simulationParams.partHeight,
           }),
           calculateCost({
             part_volume: simulationParams.partVolume,

@@ -17,13 +17,12 @@ interface QuoteEstimate {
 }
 
 /**
- * Fake supplier quote handshake. When opened, runs a ~3s "sending part to
- * <shop>…" sequence (mock fetch). Then reveals the quote payload with
- * Confirm-and-email / Save buttons (both stubbed).
- *
- * Real version would POST a STEP file + DFM report to the shop's quote
- * endpoint and wait for an actual quote ID — but for the prototype this
- * sells the "moldlocal closes the loop with suppliers" narrative.
+ * Designer-side "ready to hand off" capstone. Shows a non-binding cost
+ * + lead-time estimate for the selected local shop so the designer
+ * knows what to expect before reaching out. The "Confirm & email"
+ * button is a stubbed toast — VITYA is a design-aid tool, not a
+ * quote-routing service. The handoff happens out-of-band (email,
+ * phone) once the designer is ready.
  */
 export function QuoteModal({
   open,
@@ -47,33 +46,11 @@ export function QuoteModal({
 
   if (!open || !shop) return null
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     setPhase('confirmed')
-    try {
-      const res = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          shopName: shop.name,
-          shopZip: extractZip(shop.location),
-          partName: 'Current workspace part',
-          material: 'unspecified',
-          productionQuantity: 0,
-          estimateTooling: estimate.tooling,
-          estimatePerPart: estimate.perPart,
-          estimateLeadWeeks: estimate.leadWeeks,
-          notes: '',
-        }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      toast.success('Quote request sent', {
-        description: `${shop.name} will reply within 24h. Tracked in Molder Portal.`,
-      })
-    } catch (err) {
-      toast.error('Failed to send quote request', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      })
-    }
+    toast.success('Ready to send', {
+      description: `Email or call ${shop.name} with your DFM report when you're ready. (Demo — no message actually sent.)`,
+    })
     setTimeout(() => onClose(), 1200)
   }
 
@@ -95,7 +72,7 @@ export function QuoteModal({
             <span className="size-7 rounded-md bg-violet-500/15 border border-violet-500/40 flex items-center justify-center">
               <Factory className="size-3.5 text-violet-300" />
             </span>
-            <h2 className="text-sm font-medium text-zinc-100">Request a quote</h2>
+            <h2 className="text-sm font-medium text-zinc-100">Hand off to a local shop</h2>
           </div>
           <button
             type="button"
@@ -109,7 +86,7 @@ export function QuoteModal({
 
         <div className="p-5 space-y-4">
           <div>
-            <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Supplier</div>
+            <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Local shop</div>
             <div className="text-sm font-medium text-zinc-100">{shop.name}</div>
             <div className="text-xs text-zinc-500">{shop.location}</div>
           </div>
@@ -118,7 +95,7 @@ export function QuoteModal({
             <div className="flex items-center gap-3 py-3">
               <Loader2 className="size-4 animate-spin text-violet-300" />
               <div className="text-sm text-zinc-300">
-                Sending part + DFM report to {shop.name}…
+                Bundling DFM report for {shop.name}…
               </div>
             </div>
           )}
@@ -128,7 +105,7 @@ export function QuoteModal({
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-300 mt-0.5 shrink-0" />
                 <div className="text-xs text-emerald-200">
-                  Quote received. Reply expected within 24h.
+                  Estimate ready. Use this as a starting point when you reach out to {shop.name}.
                 </div>
               </div>
 
@@ -184,13 +161,6 @@ export function QuoteModal({
       </button>
     </button>
   )
-}
-
-// Shop location strings like "Grand Rapids, MI" don't carry a zip, but
-// some seed data does. Future work: pass shopZip through Shop directly.
-function extractZip(location: string): string | undefined {
-  const m = location.match(/\b(\d{5})\b/)
-  return m ? m[1] : undefined
 }
 
 function QuoteCell({

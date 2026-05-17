@@ -34,6 +34,7 @@ export default function DraftAnalysisPage() {
           has_uniform_wall: simulationParams.hasUniformWall,
           part_length: simulationParams.partLength,
           part_width: simulationParams.partWidth,
+          part_height: simulationParams.partHeight,
         })
 
         setDfmData(response)

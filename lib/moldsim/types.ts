@@ -134,6 +134,7 @@ export interface ManufacturingCheckRequest {
   has_uniform_wall: boolean;
   part_length?: number;             // mm
   part_width?: number;              // mm
+  part_height?: number;             // mm
   material?: string;
 }
 

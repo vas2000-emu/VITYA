@@ -23,6 +23,7 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     projected_area: 144,
     part_length: 120,
     part_width: 90,
+    part_height: 60,
     melt_temp: 240,
     mold_temp: 60,
     production_quantity: 10_000,
@@ -41,6 +42,7 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     projected_area: 98,
     part_length: 140,
     part_width: 70,
+    part_height: 10,
     melt_temp: 240,
     mold_temp: 55,
     production_quantity: 25_000,
@@ -59,6 +61,7 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     projected_area: 56,
     part_length: 180,
     part_width: 38,
+    part_height: 26,
     melt_temp: 270,
     mold_temp: 80,
     production_quantity: 5_000,
@@ -80,6 +83,7 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     projected_area: 6500, // cm²
     part_length: 1700, // mm — full automotive width
     part_width: 450, // mm — bumper depth
+    part_height: 380, // mm — top-to-bottom span
     melt_temp: 230,
     mold_temp: 50,
     production_quantity: 50_000, // automotive volumes
