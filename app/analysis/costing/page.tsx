@@ -151,8 +151,8 @@ export default function CostingPage() {
   if (isLoading && !costData) {
     return (
       <AnalysisPageLayout
-        title="Costing"
-        subtitle="Working out how much this part will cost to make..."
+        title="Cost Analysis"
+        subtitle="Calculating tooling and per-part cost estimates..."
         icon={DollarSign}
         accent="emerald"
       >
@@ -167,7 +167,7 @@ export default function CostingPage() {
   if (error || !costData) {
     return (
       <AnalysisPageLayout
-        title="Costing"
+        title="Cost Analysis"
         subtitle="Cost estimation based on Michigan injection-molding norms"
         icon={DollarSign}
         accent="emerald"
@@ -187,8 +187,8 @@ export default function CostingPage() {
 
   return (
     <AnalysisPageLayout
-      title="Costing"
-      subtitle="What it will cost to make this part: tooling up front, plus the price per piece. Numbers are based on typical Michigan injection-molding rates."
+      title="Cost Analysis"
+      subtitle="Projected tooling investment and per-unit economics based on Michigan injection-molding rates."
       icon={DollarSign}
       accent="emerald"
       isRefetching={isLoading}
@@ -252,7 +252,7 @@ export default function CostingPage() {
       {costDrivers.length > 0 && (
         <Section
           title="Cost drivers"
-          description="What&apos;s pushing the quote up or down on this part"
+          description="Factors with the most significant impact on the total quote"
         >
           <ul className="divide-y divide-zinc-800 -mx-5 -my-5">
             {costDrivers.map((d) => (
@@ -292,7 +292,7 @@ export default function CostingPage() {
 
       <Section
         title="Production metrics"
-        description="How fast the mold runs and how many parts per hour you'll get"
+        description="Throughput and machine utilization at the specified run quantity"
       >
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           {[
@@ -317,7 +317,7 @@ export default function CostingPage() {
       {costData.recommendations.length > 0 && (
         <Section
           title="Recommendations"
-          description="Cost optimization suggestions"
+          description="Design and process changes that could reduce cost at scale"
         >
           <ul className="space-y-2">
             {costData.recommendations.map((rec, i) => (
