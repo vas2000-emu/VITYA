@@ -7,6 +7,7 @@ import {
   PanelRightClose,
   PanelRight,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { useLiveDfmScore } from './viewport/useLiveDfmScore'
@@ -242,6 +243,7 @@ export function AIAssistantPanel() {
     addChatMessage,
     updateChatMessage,
     setAiThinking,
+    clearChat,
     simulationParams,
     updateSimulationParams,
     setSimulationBaseline,
@@ -528,13 +530,25 @@ export function AIAssistantPanel() {
     <div className="h-full flex flex-col bg-zinc-900">
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h2 className="font-medium">AI Assistant</h2>
-        <button
-          onClick={() => setRightCollapsed(true)}
-          className="p-1 hover:bg-zinc-800 rounded"
-          title="Collapse AI Assistant"
-        >
-          <PanelRightClose className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {chatMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => clearChat()}
+              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-zinc-300"
+              title="Clear conversation"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
+          <button
+            onClick={() => setRightCollapsed(true)}
+            className="p-1 hover:bg-zinc-800 rounded"
+            title="Collapse AI Assistant"
+          >
+            <PanelRightClose className="size-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
