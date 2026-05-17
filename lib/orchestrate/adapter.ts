@@ -20,6 +20,16 @@ export function parseIBMResponse(raw: IBMRawResponse): OrchestrateAgentResponse 
     raw.output?.generic?.find((g) => g.response_type === 'text')?.text ??
     ''
 
+  // OpenAI-compatible completions format (watsonx Orchestrate /chat/completions)
+  if (!rawText && raw.choices?.[0]?.message) {
+    const content = raw.choices[0].message.content
+    if (typeof content === 'string') {
+      rawText = content
+    } else if (Array.isArray(content)) {
+      rawText = content.map((c) => c.text ?? '').join('')
+    }
+  }
+
   // The agent is prompted to embed a JSON block inside its reply when it has
   // suggestions. Try to parse it out.
   const jsonMatch = rawText.match(/```json\s*([\s\S]*?)```/)

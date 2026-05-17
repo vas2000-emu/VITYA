@@ -18,6 +18,7 @@ import { parseIBMResponse, toAISuggestion } from '@/lib/orchestrate/adapter'
 import type { OrchestrateMessage } from '@/lib/orchestrate/types'
 
 export async function POST(req: NextRequest) {
+  console.log('[orchestrate] API_KEY starts with:', process.env.ORCHESTRATE_API_KEY?.slice(0, 6))
   const { messages } = (await req.json()) as { messages: OrchestrateMessage[] }
 
   if (!Array.isArray(messages) || messages.length === 0) {

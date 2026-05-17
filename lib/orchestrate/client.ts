@@ -4,10 +4,12 @@
 // Required .env.local entries:
 //
 //   ORCHESTRATE_API_KEY=        ← your IBM Cloud API key
-//   ORCHESTRATE_AGENT_ID=       ← your deployed agent/assistant ID
-//   ORCHESTRATE_ENDPOINT=       ← full URL to your agent's inference endpoint
-//   ORCHESTRATE_INSTANCE_ID=    ← IBM instance ID (if your endpoint needs it)
+//   ORCHESTRATE_AGENT_ID=       ← your deployed agent ID
+//   ORCHESTRATE_ENDPOINT=       ← base instance URL, e.g.
+//                                  https://api.au-syd.watson-orchestrate.cloud.ibm.com/instances/YOUR_INSTANCE_ID
+//   ORCHESTRATE_INSTANCE_ID=    ← same instance ID (used in request body)
 //
+// The chat URL is built as: ORCHESTRATE_ENDPOINT/v1/agents/ORCHESTRATE_AGENT_ID/chat
 // The IAM token is cached for its lifetime so we don't re-auth every request.
 // ---------------------------------------------------------------------------
 
@@ -15,14 +17,15 @@ import type { IBMRawResponse, OrchestrateMessage } from './types'
 
 const API_KEY      = process.env.ORCHESTRATE_API_KEY
 const AGENT_ID     = process.env.ORCHESTRATE_AGENT_ID
-const ENDPOINT     = process.env.ORCHESTRATE_ENDPOINT
+const ENDPOINT     = process.env.ORCHESTRATE_ENDPOINT   // base instance URL
 const INSTANCE_ID  = process.env.ORCHESTRATE_INSTANCE_ID
 
-let cachedToken: { value: string; expiresAt: number } | null = null
+let cachedIAM: { value: string; expiresAt: number } | null = null
+let cachedWXO: { value: string; expiresAt: number } | null = null
 
 async function getIAMToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return cachedToken.value
+  if (cachedIAM && Date.now() < cachedIAM.expiresAt) {
+    return cachedIAM.value
   }
 
   const res = await fetch('https://iam.cloud.ibm.com/identity/token', {
@@ -39,12 +42,45 @@ async function getIAMToken(): Promise<string> {
   }
 
   const data = await res.json()
-  cachedToken = {
+  cachedIAM = {
     value: data.access_token,
-    // Subtract 60s so we refresh before the token actually expires
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
   }
-  return cachedToken.value
+  return cachedIAM.value
+}
+
+async function getWXOToken(): Promise<string> {
+  if (cachedWXO && Date.now() < cachedWXO.expiresAt) {
+    return cachedWXO.value
+  }
+
+  const iamToken = await getIAMToken()
+  const base = ENDPOINT!
+    .replace(/\/$/, '')
+    .replace(/\/instances\/[^/]+$/, '')
+    .replace('api.au-syd.watson-orchestrate', 'au-syd.watson-orchestrate')
+
+  const res = await fetch(`${base}/api/v1/auth/sign_in`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${iamToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!res.ok) {
+    throw new Error(`WXO auth failed (${res.status}): ${await res.text()}`)
+  }
+
+  const data = await res.json()
+  const wxoToken = data.token ?? data.access_token ?? data.jwt
+  if (!wxoToken) throw new Error('WXO auth returned no token')
+
+  cachedWXO = {
+    value: wxoToken,
+    expiresAt: Date.now() + 55 * 60 * 1000, // 55 min
+  }
+  return cachedWXO.value
 }
 
 export async function sendToOrchestrate(messages: OrchestrateMessage[]): Promise<IBMRawResponse> {
@@ -56,12 +92,21 @@ export async function sendToOrchestrate(messages: OrchestrateMessage[]): Promise
   }
 
   const token = await getIAMToken()
+  const base = ENDPOINT!
+    .replace(/\/$/, '')
+    .replace(/\/instances\/[^/]+$/, '')
+    .replace('api.au-syd.watson-orchestrate', 'au-syd.watson-orchestrate')
+  const chatUrl = `${base}/api/v1/orchestrate/${AGENT_ID}/chat/completions`
 
-  const body: Record<string, unknown> = { messages }
-  if (AGENT_ID)    body.agent_id    = AGENT_ID
-  if (INSTANCE_ID) body.instance_id = INSTANCE_ID
+  console.log('[orchestrate] POST', chatUrl)
+  console.log('[orchestrate] token prefix', token.slice(0, 20) + '...')
 
-  const res = await fetch(ENDPOINT, {
+  const body: Record<string, unknown> = {
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: false,
+  }
+
+  const res = await fetch(chatUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

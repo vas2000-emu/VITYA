@@ -24,6 +24,14 @@ export interface OrchestrateRequest {
 // The adapter in adapter.ts normalises this into OrchestrateAgentResponse.
 
 export interface IBMRawResponse {
+  // OpenAI-compatible completions format (watsonx Orchestrate /chat/completions)
+  choices?: Array<{
+    message?: {
+      role: string
+      content: string | Array<{ type: string; text?: string }>
+    }
+    delta?: { content?: string }
+  }>
   // Watson Assistant / watsonx Orchestrate generic text output
   output?: {
     generic?: Array<{

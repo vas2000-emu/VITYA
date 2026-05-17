@@ -154,9 +154,9 @@ function SuggestionCard({ suggestion, onAccept, onReject, onPreview }: Suggestio
 
         {expanded && (
           <div className="space-y-2 mb-4">
-            {suggestion.operations.map((op) => (
+            {suggestion.operations.map((op, i) => (
               <OperationItem
-                key={op.id}
+                key={op.id ?? `${suggestion.id}-op-${i}`}
                 operation={op}
                 onPreview={() => onPreview(suggestion.id)}
               />
@@ -212,6 +212,11 @@ export function AIAssistantPanel() {
     addChatMessage,
     setAiThinking,
     updateParameterValue,
+    parameters,
+    manufacturingIssues,
+    currentPartId,
+    simulationResults,
+    simulationParams,
   } = useAppStore()
 
   // Accepts a suggestion and applies its operations to the parameter store
@@ -234,7 +239,7 @@ export function AIAssistantPanel() {
     setAiThinking(true)
 
     try {
-      const res = await fetch('/api/orchestrate/chat', {
+      const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,6 +247,14 @@ export function AIAssistantPanel() {
             ...chatMessages.map(({ role, content }) => ({ role, content })),
             userMsg,
           ],
+          context: {
+            partId: currentPartId,
+            parameters,
+            manufacturingIssues,
+            dfmScore: simulationResults.dfm?.overall_score,
+            material: simulationParams.material,
+            wallThickness: simulationParams.wallThickness,
+          },
         }),
       })
       const data = await res.json()
