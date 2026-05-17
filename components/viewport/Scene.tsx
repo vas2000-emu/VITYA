@@ -7,10 +7,14 @@ import { Canvas } from '@react-three/fiber'
 import { Grid, Environment, ContactShadows, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { silenceThreeWarnings } from '@/lib/silenceThreeWarnings'
 import { CameraController } from './CameraController'
 import { Part } from './Part'
 import { Mold } from './Mold'
 import { ViewportLoader } from './ViewportLoader'
+
+// Self-guards against SSR and double-install; safe to call at module load.
+silenceThreeWarnings()
 
 // How long the loader stays up after mount. Just a cosmetic cover for
 // the brief startup flash that the original code had. Not a stability
