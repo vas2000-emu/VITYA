@@ -319,7 +319,7 @@ function EvaluateRibbon() {
         />
       </RibbonGroup>
       <RibbonGroup>
-        <RibbonLink href="/analysis/costing" icon={DollarSign} label="Costing" />
+        <RibbonLink href="/analysis/costing" icon={DollarSign} label="Cost Analysis" />
         <RibbonLink
           href="/analysis/on-demand"
           icon={Factory}
@@ -366,11 +366,11 @@ function RibbonLink({
   return (
     <Link
       href={href}
-      className="flex flex-col items-center justify-start gap-1 w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
+      className="flex flex-col items-center justify-start gap-1.5 w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
       title={label}
     >
       <Icon className="size-6 text-zinc-300 shrink-0" />
-      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words">
+      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words min-h-[2.5rem] flex items-start justify-center">
         {label}
       </span>
     </Link>
@@ -391,7 +391,7 @@ function RibbonButton({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-start gap-1 w-[78px] px-1 py-2 rounded transition-colors ${
+      className={`flex flex-col items-center justify-start gap-1.5 w-[78px] px-1 py-2 rounded transition-colors ${
         active
           ? 'bg-blue-600/80 hover:bg-blue-600 text-white'
           : 'hover:bg-zinc-800 text-zinc-300'
@@ -399,7 +399,7 @@ function RibbonButton({
       title={label}
     >
       <Icon className="size-6 shrink-0" />
-      <span className="text-[11px] leading-tight text-center break-words">
+      <span className="text-[11px] leading-tight text-center break-words min-h-[2.5rem] flex items-start justify-center">
         {label}
       </span>
     </button>

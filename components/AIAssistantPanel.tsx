@@ -617,13 +617,13 @@ export function AIAssistantPanel() {
             {isAiThinking ? '…' : 'Send'}
           </button>
         </div>
-        <div className="flex gap-2 mt-2">
+        <div className="grid grid-cols-4 gap-2 mt-2">
           {buildDynamicQuickPrompts(liveIssues).map((q) => (
             <button
               key={q.label}
               onClick={() => void sendMessage(q.prompt)}
               disabled={isAiThinking}
-              className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed rounded"
+              className="flex items-center justify-center text-center px-2 py-1.5 text-xs leading-tight bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed rounded min-h-[2.25rem]"
               title={q.prompt}
             >
               {q.label}
