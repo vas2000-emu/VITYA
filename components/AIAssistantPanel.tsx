@@ -34,9 +34,19 @@ const FIELD_LABELS: Record<DesignField, string> = {
   minDraftAngle: 'Min draft angle',
 }
 
+/** Display units for the proposal card. The AI still proposes in mm
+ *  internally (engine + system prompt + tool schema all speak mm), so
+ *  the card converts at render time only. minDraftAngle stays degrees. */
 const FIELD_UNITS: Record<DesignField, string> = {
-  wallThickness: 'mm',
+  wallThickness: 'in',
   minDraftAngle: 'deg',
+}
+
+/** Convert the AI's mm-native value to whatever units the panel shows.
+ *  Wall thickness gets converted to inches; draft stays as-is. */
+function formatChangeValue(field: DesignField, value: number): string {
+  if (field === 'wallThickness') return (value / 25.4).toFixed(3)
+  return value.toString()
 }
 
 /** Inverse of ParameterPanel's paramToSimulationKey. simulationParams is
@@ -557,7 +567,7 @@ function ProposalChangeRow({ change }: { change: DesignChange }) {
     <li className="flex items-center justify-between">
       <span className="text-zinc-400">{label}</span>
       <span className="text-blue-300">
-        {change.value} {unit}
+        {formatChangeValue(change.field, change.value)} {unit}
       </span>
     </li>
   )

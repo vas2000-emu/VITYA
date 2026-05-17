@@ -40,7 +40,7 @@ export function SimulationStatusHud() {
       </div>
 
       <div className="flex items-center gap-3 px-3 py-2 text-[11px] rounded-lg border border-zinc-800 bg-zinc-900/85 backdrop-blur text-zinc-300">
-        <StatBit label="Wall" value={`${sp.wallThickness.toFixed(1)} mm`} />
+        <StatBit label="Wall" value={`${(sp.wallThickness / 25.4).toFixed(3)} in`} />
         <StatBit label="Draft" value={`${sp.minDraftAngle.toFixed(1)}°`} />
         <StatBit label="Material" value={sp.material} />
         <StatBit label="Cavities" value={`${sp.numCavities}`} />

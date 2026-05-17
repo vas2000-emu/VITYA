@@ -16,6 +16,20 @@ const paramToSimulationKey: Record<string, keyof import('@/store/useAppStore').S
   'p-height': 'partHeight',
 }
 
+// Parameters whose underlying value is in mm but the UI shows inches.
+// Engine + simulationParams stay mm everywhere; we convert only at
+// the panel boundary so AI proposals, geometry scaling, and the
+// moldsim API call shape all keep speaking mm.
+const MM_PARAM_IDS = new Set(['p-len', 'p-wid', 'p-height', 'p-wall'])
+const MM_PER_INCH = 25.4
+
+const formatInches = (mm: number): string => {
+  const inches = mm / MM_PER_INCH
+  // 2 decimals for sub-inch (wall thickness ~0.12"), 1 decimal for the
+  // body dimensions (67.0", 17.7", etc.) to keep the column tidy.
+  return inches < 10 ? inches.toFixed(2) : inches.toFixed(1)
+}
+
 export function ParameterPanel() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const {
@@ -72,26 +86,54 @@ export function ParameterPanel() {
               </div>
 
               <div className="flex items-center gap-1">
-                {editingId === param.id ? (
-                  <input
-                    type="number"
-                    value={param.value}
-                    onChange={(e) => handleValueChange(param.id, parseFloat(e.target.value) || 0)}
-                    onBlur={() => setEditingId(null)}
-                    autoFocus
-                    className="w-16 px-2 py-1 text-xs text-right bg-zinc-800 border border-blue-500 rounded outline-none"
-                  />
-                ) : (
-                  <div
-                    onClick={() => !param.locked && setEditingId(param.id)}
-                    className={`px-2 py-1 text-xs text-right font-mono rounded ${
-                      param.locked ? 'text-zinc-500' : 'hover:bg-zinc-700 cursor-pointer'
-                    }`}
-                  >
-                    {param.value}
-                  </div>
-                )}
-                <span className="text-xs text-zinc-500 w-8">{param.unit}</span>
+                {(() => {
+                  const showInches = MM_PARAM_IDS.has(param.id)
+                  const displayUnit = showInches ? 'in' : param.unit
+                  // Editing field always operates in the displayed unit
+                  // (inches for mm-backed params, raw value for others)
+                  // and converts back to the canonical mm before
+                  // dispatching, so the engine + simulationParams stay
+                  // in mm everywhere.
+                  const editValue = showInches
+                    ? formatInches(param.value)
+                    : String(param.value)
+                  const onEditCommit = (raw: string) => {
+                    const parsed = parseFloat(raw)
+                    if (!Number.isFinite(parsed)) {
+                      handleValueChange(param.id, 0)
+                      return
+                    }
+                    handleValueChange(
+                      param.id,
+                      showInches ? parsed * MM_PER_INCH : parsed,
+                    )
+                  }
+                  return editingId === param.id ? (
+                    <input
+                      type="number"
+                      step={showInches ? '0.01' : '1'}
+                      defaultValue={editValue}
+                      onChange={(e) => onEditCommit(e.target.value)}
+                      onBlur={() => setEditingId(null)}
+                      autoFocus
+                      title={`${param.name} (${displayUnit})`}
+                      placeholder={editValue}
+                      className="w-16 px-2 py-1 text-xs text-right bg-zinc-800 border border-blue-500 rounded outline-none"
+                    />
+                  ) : (
+                    <div
+                      onClick={() => !param.locked && setEditingId(param.id)}
+                      className={`px-2 py-1 text-xs text-right font-mono rounded ${
+                        param.locked ? 'text-zinc-500' : 'hover:bg-zinc-700 cursor-pointer'
+                      }`}
+                    >
+                      {showInches ? formatInches(param.value) : param.value}
+                    </div>
+                  )
+                })()}
+                <span className="text-xs text-zinc-500 w-8">
+                  {MM_PARAM_IDS.has(param.id) ? 'in' : param.unit}
+                </span>
               </div>
             </div>
           ))}

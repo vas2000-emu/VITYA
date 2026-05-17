@@ -73,16 +73,23 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     has_uniform_wall: false, // long span + concentrated mount → non-uniform
   },
   bumper: {
-    // Front fascia bumper — large automotive cosmetic part. The biggest
-    // part in the library by every dimension, which drives the moldsim
-    // numbers (huge tooling, long cycle, high flow ratio).
+    // Front fascia bumper — large automotive cosmetic part. Realistic
+    // production dimensions for a midsize-sedan front fascia:
+    //   - 1700 mm (~67") wide: full vehicle width
+    //   - 220 mm (~8.7") deep: typical bumper fascia front-to-back
+    //   - 380 mm (~15") tall: top-to-bottom span
+    // wall_thickness starts at 2.0 mm intentionally — on the thin side
+    // for a part this size, which gives the AI assistant something
+    // obvious to propose (2.5-3.0 mm to reduce sink-mark risk and
+    // improve fillability). Accepting the proposal in the demo visibly
+    // bumps the DFM score.
     material: 'PP',
-    wall_thickness: 3.0,
-    part_volume: 1200, // cm³
-    part_weight: 1100, // g
-    projected_area: 6500, // cm²
+    wall_thickness: 2.0, // demo starts sub-optimal — AI proposes 2.5-3.0
+    part_volume: 700, // cm³ — thin shell × bumper bbox at the new depth
+    part_weight: 640, // g — PP density × volume
+    projected_area: 6460, // cm² — front face L × H (1700 × 380 mm)
     part_length: 1700, // mm — full automotive width
-    part_width: 450, // mm — bumper depth
+    part_width: 220, // mm — realistic bumper depth (was 450; too deep)
     part_height: 380, // mm — top-to-bottom span
     melt_temp: 230,
     mold_temp: 50,
@@ -90,7 +97,7 @@ export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
     complexity: 'very_complex',
     num_cavities: 1, // single huge tool
     num_undercuts: 3, // sensor mounts + license plate recess + fog lights
-    min_draft_angle: 2.0,
+    min_draft_angle: 1.5, // on the low side for a part this size — AI may also propose 2-3°
     has_sharp_corners: false,
     has_uniform_wall: false, // wraparound ends taper, grille area thinner
   },

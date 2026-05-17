@@ -12,10 +12,19 @@ import * as THREE from 'three'
 export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
 
 /** Live geometry inputs. Defaults reflect the bumper hero baseline so
- *  loading without params yields the same look as before this change. */
+ *  loading without params yields the same look as before this change.
+ *  All three axis scales are multipliers against the procedural
+ *  geometry's natural authoring dimensions (1 = baseline). The
+ *  user-facing Parameters panel computes these from the current
+ *  simulationParams.part{Length,Width,Height} divided by the current
+ *  part's baseline dimensions in partSimInputs. */
 export interface GeometryParams {
-  /** Overall part height multiplier (1 = baseline). Driven by p-height. */
+  /** Length scale (world X). Driven by p-len. */
+  lengthScale: number
+  /** Height scale (world Y). Driven by p-height. */
   heightScale: number
+  /** Width / depth scale (world Z). Driven by p-wid. */
+  widthScale: number
   /** Wall/shell thickness in mm. Currently only meaningfully affects
    *  the phone case shell and the bracket footprint. */
   wallThickness: number
@@ -25,7 +34,9 @@ export interface GeometryParams {
 }
 
 export const DEFAULT_GEOMETRY_PARAMS: GeometryParams = {
+  lengthScale: 1,
   heightScale: 1,
+  widthScale: 1,
   wallThickness: 2.5,
   draftDeg: 2,
 }
@@ -307,12 +318,20 @@ function getBaseGeometry(id: PartId): THREE.BufferGeometry {
 /**
  * Apply parameter-driven deformations to the baseline geometry.
  *
- *  - heightScale stretches the part along Y.
+ *  - lengthScale / heightScale / widthScale stretch the part along
+ *    world X / Y / Z respectively. These are multipliers against the
+ *    procedural geometry's natural authoring dimensions so that
+ *    editing partLength / partHeight / partWidth in the panel
+ *    visibly resizes the part proportionally.
  *  - draftDeg tapers walls so vertices above y=0 are pulled inward
  *    proportional to (y * tan(draft)). This approximates a real CAD
  *    draft angle and works for any baseline shape.
  *  - wallThickness has no visible effect for solid demo parts; the
  *    phone case uses it via a separate path (rebuilt from primitives).
+ *
+ * Scaling is applied BEFORE the draft taper so the draft works in the
+ * post-scale frame (otherwise a tall stretched part would taper too
+ * aggressively relative to its visible height).
  *
  * Returns a new BufferGeometry — the baseline cache stays untouched.
  */
@@ -323,21 +342,24 @@ function applyParams(base: THREE.BufferGeometry, params: GeometryParams): THREE.
 
   base.computeBoundingBox()
   const box = base.boundingBox!
-  const halfY = Math.max(0.001, (box.max.y - box.min.y) / 2)
+  // halfY of the SCALED geometry, used for the draft taper math.
+  const halfY = Math.max(0.001, ((box.max.y - box.min.y) / 2) * params.heightScale)
   const draftRad = (params.draftDeg * Math.PI) / 180
-  // tan(draft) * halfY = inward offset at the very top. Roughly 5% per
-  // 3° for the bumper-scale parts — visually noticeable without being
-  // grotesque.
+  // tan(draft) * halfY = inward offset at the very top. Visual gain is
+  // amplified (no dampening) so the demo's draft proposal — going from
+  // 1.5° to ~3° — produces a noticeable taper change on accept.
   const taperPerY = Math.tan(draftRad)
 
   for (let i = 0; i < arr.length; i += 3) {
+    const x = arr[i] * params.lengthScale
     const y = arr[i + 1] * params.heightScale
+    const z = arr[i + 2] * params.widthScale
     // Inward taper grows with distance above the centerline. Negative-Y
     // verts (underside) are left alone so the bottom face stays flat.
-    const inwardFactor = y > 0 ? 1 - (y * taperPerY) / halfY * 0.5 : 1
-    arr[i] *= inwardFactor
+    const inwardFactor = y > 0 ? 1 - (y * taperPerY) / halfY : 1
+    arr[i] = x * inwardFactor
     arr[i + 1] = y
-    arr[i + 2] *= inwardFactor
+    arr[i + 2] = z * inwardFactor
   }
   pos.needsUpdate = true
   geom.computeVertexNormals()

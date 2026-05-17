@@ -106,12 +106,16 @@ const initialSuggestions: AISuggestion[] = [
 // rebuild in components/viewport/Part.tsx also keys off these IDs. Initial
 // values track the bumper baseline (the default current part) — these get
 // overwritten by useResultsStore.selectPart() when the user switches parts.
+// Values are stored in millimetres internally — the ParameterPanel
+// converts L/W/H/wall to inches at the UI boundary. Keep these aligned
+// with lib/partSimInputs.ts.bumper so the panel + simulationParams +
+// geometry-scale baseline all start consistent on first load.
 const initialParameters: Parameter[] = [
   { id: 'p-len', name: 'Part Length', value: 1700, unit: 'mm', locked: false },
-  { id: 'p-wid', name: 'Part Width', value: 450, unit: 'mm', locked: false },
+  { id: 'p-wid', name: 'Part Width', value: 220, unit: 'mm', locked: false },
   { id: 'p-height', name: 'Height', value: 380, unit: 'mm', locked: false },
-  { id: 'p-draft', name: 'Draft Angle', value: 2, unit: '°', locked: false },
-  { id: 'p-wall', name: 'Wall Thickness', value: 3, unit: 'mm', locked: false },
+  { id: 'p-draft', name: 'Draft Angle', value: 1.5, unit: '°', locked: false },
+  { id: 'p-wall', name: 'Wall Thickness', value: 2, unit: 'mm', locked: false },
 ]
 
 interface AppState {
@@ -392,12 +396,12 @@ export const useAppStore = create<AppState>((set) => ({
   // the analysis pages light up with bumper data on first load.
   simulationParams: {
     material: 'PP',
-    wallThickness: 3,
-    partVolume: 1200,
-    partWeight: 1100,
-    projectedArea: 6500,
+    wallThickness: 2,
+    partVolume: 700,
+    partWeight: 640,
+    projectedArea: 6460,
     partLength: 1700,
-    partWidth: 450,
+    partWidth: 220,
     partHeight: 380,
     meltTemp: 230,
     moldTemp: 50,
@@ -405,18 +409,18 @@ export const useAppStore = create<AppState>((set) => ({
     complexity: 'very_complex',
     numCavities: 1,
     numUndercuts: 3,
-    minDraftAngle: 2,
+    minDraftAngle: 1.5,
     hasSharpCorners: false,
     hasUniformWall: false,
   },
   simulationBaseline: {
     material: 'PP',
-    wallThickness: 3,
-    partVolume: 1200,
-    partWeight: 1100,
-    projectedArea: 6500,
+    wallThickness: 2,
+    partVolume: 700,
+    partWeight: 640,
+    projectedArea: 6460,
     partLength: 1700,
-    partWidth: 450,
+    partWidth: 220,
     partHeight: 380,
   },
   simulationResults: {
