@@ -23,7 +23,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
 import { useResultsStore } from '@/store/useResultsStore'
 import { getDashboardAnalysis, partsLibrary } from '@/lib/mockMoldAnalysis'
-import type { PartId } from '@/lib/types'
+import type { DesignProposal, PartId } from '@/lib/types'
 
 type Tab = 'Part' | 'Evaluate' | 'AI Suggestions'
 const TABS: Tab[] = ['Part', 'Evaluate', 'AI Suggestions']
@@ -32,11 +32,11 @@ export function Toolbar() {
   const [activeTab, setActiveTab] = useState<Tab>('Part')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const {
-    aiSuggestions,
-    previewSuggestion,
+    aiPartSuggestions,
     showManufacturing,
     setShowManufacturing,
     setRightPanel,
+    setRightCollapsed,
     logout,
     currentPartId,
     setCurrentPartId,
@@ -124,10 +124,14 @@ export function Toolbar() {
         {activeTab === 'Evaluate' && <EvaluateRibbon />}
         {activeTab === 'AI Suggestions' && (
           <MarkupRibbon
-            suggestions={aiSuggestions}
-            onPreview={(id) => {
-              previewSuggestion(id)
+            suggestions={aiPartSuggestions.items}
+            loading={aiPartSuggestions.loading}
+            onPreview={() => {
+              // Surface the AI panel so the user sees the full card +
+              // can Accept / Reject. The proposals shown in the ribbon
+              // are the same data as the panel's "Suggested optimizations".
               setRightPanel('ai')
+              setRightCollapsed(false)
             }}
           />
         )}
@@ -230,28 +234,34 @@ function PartRibbon({
 
 function MarkupRibbon({
   suggestions,
+  loading,
   onPreview,
 }: {
-  suggestions: { id: string; title: string; status: string }[]
-  onPreview: (id: string) => void
+  suggestions: DesignProposal[]
+  loading: boolean
+  onPreview: () => void
 }) {
   return (
     <RibbonGroup>
-      {suggestions.length === 0 ? (
+      {loading && suggestions.length === 0 && (
         <span className="text-xs text-zinc-500 px-3 py-3 self-center">
-          No suggestions yet
+          Generating optimizations…
         </span>
-      ) : (
-        suggestions.map((s) => (
-          <RibbonButton
-            key={s.id}
-            icon={Sparkles}
-            label={s.title}
-            active={s.status === 'previewing'}
-            onClick={() => onPreview(s.id)}
-          />
-        ))
       )}
+      {!loading && suggestions.length === 0 && (
+        <span className="text-xs text-zinc-500 px-3 py-3 self-center">
+          No optimizations yet — open the AI panel to generate some
+        </span>
+      )}
+      {suggestions.map((s) => (
+        <RibbonButton
+          key={s.id}
+          icon={Sparkles}
+          label={s.title}
+          active={s.status === 'accepted'}
+          onClick={() => onPreview()}
+        />
+      ))}
     </RibbonGroup>
   )
 }

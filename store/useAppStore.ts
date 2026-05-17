@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AISuggestion,
   CustomPartSpec,
+  DesignProposal,
   Parameter,
   RightPanelType,
   ChatMessage,
@@ -215,6 +216,22 @@ interface AppState {
   userParts: UserPart[]
   addUserPart: (part: UserPart) => void
   removeUserPart: (id: string) => void
+
+  // Shared AI suggestions state — fetched from /api/ai/chat with
+  // intent='suggestions' by AIAssistantPanel and also surfaced in the
+  // Toolbar's AI Suggestions ribbon. Lives in the store so both
+  // surfaces see the same set without duplicating the fetch.
+  aiPartSuggestions: {
+    partId: string | null
+    items: DesignProposal[]
+    loading: boolean
+    error: string | null
+  }
+  setAiPartSuggestions: (
+    next: Partial<AppState['aiPartSuggestions']>,
+  ) => void
+  /** Update a single suggestion's status in-place (accepted / rejected). */
+  patchAiPartSuggestion: (id: string, patch: Partial<DesignProposal>) => void
 
   // Flag flipped to true when an STL load completes; UploadAnalyzeModal
   // watches this and opens. Reset to false once the modal is dismissed
@@ -440,6 +457,21 @@ export const useAppStore = create<AppState>((set) => ({
   removeUserPart: (id) =>
     set((s) => ({
       userParts: s.userParts.filter((p) => p.id !== id),
+    })),
+
+  aiPartSuggestions: { partId: null, items: [], loading: false, error: null },
+  setAiPartSuggestions: (next) =>
+    set((s) => ({
+      aiPartSuggestions: { ...s.aiPartSuggestions, ...next },
+    })),
+  patchAiPartSuggestion: (id, patch) =>
+    set((s) => ({
+      aiPartSuggestions: {
+        ...s.aiPartSuggestions,
+        items: s.aiPartSuggestions.items.map((p) =>
+          p.id === id ? { ...p, ...patch } : p,
+        ),
+      },
     })),
   pendingUploadAnalysis: false,
   setPendingUploadAnalysis: (pending) => set({ pendingUploadAnalysis: pending }),

@@ -86,24 +86,29 @@ const FIELD_TO_PARAM_ID: Partial<Record<DesignField, string>> = {
   partHeight: 'p-height',
 }
 
+// Quick prompts seed the chat with action-oriented requests instead of
+// open-ended questions. Each one nudges the AI toward calling a tool
+// (propose_design_change / create_part_from_description / find_local_shops)
+// rather than just talking. Easy to swap per demo.
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   {
-    label: 'Add fillet',
-    prompt: 'How should I add fillets to the sharp edges of this part?',
-  },
-  {
-    label: 'Check draft',
-    prompt: 'Are the draft angles on this part sufficient for clean ejection?',
-  },
-  {
-    label: 'Explain the mold',
+    label: 'Suggest improvements',
     prompt:
-      'Walk me through the mold for this part — cavity, core, parting line, and gate. What should I be thinking about?',
+      "Look at the current part and propose 2-3 specific changes that would improve moldability or cost. Use the propose_design_change tool — don't just describe.",
   },
   {
-    label: 'Find local shops',
+    label: 'Reduce cost',
     prompt:
-      'Once this part is design-ready, which local shops could build it? My ZIP is 49503.',
+      'What single change would most reduce the per-part cost without hurting quality? Propose it.',
+  },
+  {
+    label: 'Find shops nearby',
+    prompt:
+      "I'm in 49503. Which local shops could build this part? Use the find_local_shops tool.",
+  },
+  {
+    label: 'New part',
+    prompt: 'Make me a new part — a [describe what you want].',
   },
 ]
 
@@ -128,15 +133,18 @@ export function AIAssistantPanel() {
     setUploadedSTL,
     setCustomPartSpec,
     addUserPart,
+    aiPartSuggestions,
+    setAiPartSuggestions,
+    patchAiPartSuggestion,
   } = useAppStore()
 
-  // Dynamic suggestion-card state. Populated on mount via a single
-  // /api/ai/chat call with intent='suggestions'; the model emits 2-3
-  // separate propose_design_change tool calls covering different
-  // improvement angles, and we render each as a ProposalCard.
-  const [suggestions, setSuggestions] = useState<DesignProposal[]>([])
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
-  const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
+  // Dynamic suggestion-card state lives in useAppStore so the
+  // Toolbar's AI Suggestions ribbon can show the same list without a
+  // duplicate fetch. The panel + the ribbon both read aiPartSuggestions
+  // and dispatch through the shared patchAiPartSuggestion.
+  const suggestions = aiPartSuggestions.items
+  const suggestionsLoading = aiPartSuggestions.loading
+  const suggestionsError = aiPartSuggestions.error
   // Guard the on-mount fetch so React StrictMode's double-invoke (or a
   // currentPartId effect re-fire) doesn't trigger two concurrent calls.
   const suggestionsFetchedFor = useRef<string | null>(null)
@@ -170,8 +178,11 @@ export function AIAssistantPanel() {
   )
 
   const fetchSuggestions = useCallback(async () => {
-    setSuggestionsLoading(true)
-    setSuggestionsError(null)
+    setAiPartSuggestions({
+      partId: currentPartId,
+      loading: true,
+      error: null,
+    })
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -194,20 +205,24 @@ export function AIAssistantPanel() {
         error?: string
       }
       if (!res.ok) {
-        setSuggestionsError(data.error ?? `HTTP ${res.status}`)
-        setSuggestions([])
+        setAiPartSuggestions({
+          loading: false,
+          error: data.error ?? `HTTP ${res.status}`,
+          items: [],
+        })
         return
       }
       // Model may collapse to a single proposal; accept either shape.
       const next = data.proposals ?? (data.proposal ? [data.proposal] : [])
-      setSuggestions(next)
+      setAiPartSuggestions({ loading: false, error: null, items: next })
     } catch (err) {
-      setSuggestionsError(err instanceof Error ? err.message : 'Network error')
-      setSuggestions([])
-    } finally {
-      setSuggestionsLoading(false)
+      setAiPartSuggestions({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Network error',
+        items: [],
+      })
     }
-  }, [buildContext])
+  }, [buildContext, currentPartId, setAiPartSuggestions])
 
   // Fetch one set of suggestions per part. Switching parts re-fetches;
   // edits within the same part don't (user can hit Regenerate).
@@ -227,15 +242,11 @@ export function AIAssistantPanel() {
       }
     }
     updateSimulationParams(patch)
-    setSuggestions((current) =>
-      current.map((p) => (p.id === proposal.id ? { ...p, status: 'accepted' } : p)),
-    )
+    patchAiPartSuggestion(proposal.id, { status: 'accepted' })
   }
 
   const handleRejectSuggestion = (proposal: DesignProposal) => {
-    setSuggestions((current) =>
-      current.map((p) => (p.id === proposal.id ? { ...p, status: 'rejected' } : p)),
-    )
+    patchAiPartSuggestion(proposal.id, { status: 'rejected' })
   }
 
   /** Apply a proposal's changes. simulationParams drives the 3D
