@@ -303,6 +303,85 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
         isLoading: false,
         error: null,
       })
+
+      // Also update the results store so the /results page shows real data
+      // instead of stale mock numbers from the previously-loaded demo part.
+      const dfmScore = Math.round(results.manufacturing.overall_score)
+      const tooling = results.cost.total_tooling_cost
+      const perPart = results.cost.total_cost_per_part
+      const cycleTime = results.cooling.cycle_time
+      const costRiskLabel =
+        tooling > 25_000 || perPart > 2 ? 'High' : tooling > 15_000 ? 'Medium' : 'Low'
+      const leadTimeLabel = cycleTime > 45 ? 'Long' : cycleTime > 30 ? 'Moderate' : 'Short'
+
+      const syntheticAnalysis: MoldAnalysisResult = {
+        partId: part.id as PartId,
+        partName: part.label,
+        partSummary:
+          part.kind === 'ai-created'
+            ? `AI-generated ${part.spec.shape} part.`
+            : 'User-uploaded STL part.',
+        overallScore: dfmScore,
+        improvedScore: dfmScore,
+        issues: [],
+        riskSummary: [
+          {
+            label: 'Moldability',
+            value: `${dfmScore}/100`,
+            description: results.manufacturing.is_manufacturable
+              ? 'Geometry meets baseline DFM thresholds.'
+              : 'DFM checks flagged risks — review the issues panel.',
+          },
+          {
+            label: 'Cost risk',
+            value: costRiskLabel,
+            description: `~$${tooling.toLocaleString()} tooling + $${perPart.toFixed(2)}/part at 10,000 pcs.`,
+          },
+          {
+            label: 'Lead time',
+            value: leadTimeLabel,
+            description: `Cycle time ${cycleTime.toFixed(1)}s; ${Math.round(results.cost.parts_per_hour)} pcs/hr.`,
+          },
+          {
+            label: 'Fill time',
+            value: `${results.filling.fill_time.toFixed(1)}s`,
+            description:
+              results.filling.fill_ratio >= 0.95
+                ? 'Part fills completely.'
+                : 'Potential short-shot risk.',
+          },
+        ],
+        supplierReadiness: {
+          region: 'Michigan',
+          status:
+            dfmScore >= 80 ? 'Ready' : dfmScore >= 60 ? 'Review needed' : 'Redesign recommended',
+          notes: results.manufacturing.summary,
+        },
+        checklist:
+          results.manufacturing.issues.length === 0
+            ? [{ id: 'dfm-ok', label: 'No DFM issues detected', status: 'good' as const }]
+            : results.manufacturing.issues.map((issue, i) => ({
+                id: `dfm-${i}`,
+                label: issue.issue,
+                status: (
+                  issue.severity === 'critical'
+                    ? 'action'
+                    : issue.severity === 'warning'
+                      ? 'attention'
+                      : 'good'
+                ) as 'good' | 'attention' | 'action',
+              })),
+      }
+
+      set({
+        liveResults: results,
+        liveError: null,
+        analysis: syntheticAnalysis,
+        selectedIssueId: null,
+        fixedIssueIds: [],
+        pendingFixId: null,
+        showFix: false,
+      })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to analyze part'
       app.setSimulationResults({ isLoading: false, error: msg })
