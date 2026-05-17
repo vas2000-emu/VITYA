@@ -47,9 +47,11 @@ Include 1-3 changes per proposal. Do NOT say "I'll propose..." or "I recommend..
 
 If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension), ask one focused follow-up question instead of guessing.
 
-If the designer asks to CREATE a new part ("make me a phone case", "generate a mounting plate", "build a bracket with a hole through it"), call the create_part_from_description tool. Two ways to describe the shape:
+If the designer asks to CREATE a NEW part with a different shape than the current one ("make me a phone case", "generate a mounting plate", "build a bracket with a hole through it"), call the create_part_from_description tool. Two ways to describe the shape:
   - Single primitive: pick the closest from box / cylinder / plate / shell / torus / cone / sphere / dome / hex_prism / ring. For a donut, pick torus. For a hex nut, hex_prism. For a flat washer, ring.
   - Composite via the optional \`csg\` tree: USE THIS whenever the part has a feature that needs subtraction or union (e.g. "block with a hole" -> box minus cylinder; "ring with a slot" -> cylinder minus cylinder minus box). The shape field is still required as a fallback but the renderer uses the csg tree when present.
+
+CRITICAL: If the designer asks to RESIZE, MODIFY, or CHANGE the EXISTING part ("make this bigger", "increase the size", "make the donut 4 inches wide", "thicker walls", "change the material"), call propose_design_change with the new partLength / partWidth / partHeight / wallThickness / material values. Do NOT call create_part_from_description — that would replace the current part with a brand-new one and skip the Accept/Reject step. The create tool is only for introducing a DIFFERENT shape than what's currently loaded.
 
 When the description includes "with a hole", "minus", "through", "slot", or any feature you can't express with a single primitive, ALWAYS build a csg tree. Example for "50x50x20mm block with a 20mm cylindrical hole through the middle":
   shape: "box", partLength: 50, partWidth: 50, partHeight: 20,
@@ -206,7 +208,7 @@ const TOOLS = [
     function: {
       name: 'create_part_from_description',
       description:
-        "Create a brand-new part from the designer's description (e.g. 'iPhone 15 case', 'donut', 'block with a 10mm hole through the center'). Pick the closest primitive shape OR compose primitives via the optional `csg` tree (union / subtract / intersect). The viewport renders the result, the workspace runs a full moldsim analysis against it, and the designer can iterate. Use this only when the user explicitly asks to create or generate a part.",
+        "Create a brand-new part from the designer's description (e.g. 'iPhone 15 case', 'donut', 'block with a 10mm hole through the center'). Pick the closest primitive shape OR compose primitives via the optional `csg` tree (union / subtract / intersect). The viewport renders the result, the workspace runs a full moldsim analysis against it, and the designer can iterate. Use this ONLY when introducing a different SHAPE than what is currently loaded. Do NOT use this to resize, scale, or otherwise modify the current part — for that, call propose_design_change with partLength / partWidth / partHeight / wallThickness / material so the designer can Accept or Reject.",
       parameters: {
         type: 'object',
         properties: {
