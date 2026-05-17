@@ -137,7 +137,7 @@ export default function OnDemandManufacturingPage() {
   return (
     <AnalysisPageLayout
       title="Local Manufacturing"
-      subtitle="When your design is ready, here are Michigan-area injection molders you could hand it to. The DFM score on this page tells you whether the part will need rework before a shop will accept the file."
+      subtitle="When your design is ready, here are Michigan-area injection molders you could hand it to. The moldability score on this page tells you whether the part will need rework before a shop will accept the file."
       icon={Factory}
       accent="violet"
       isRefetching={isLoading}

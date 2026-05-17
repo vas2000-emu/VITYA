@@ -116,7 +116,7 @@ export default function DraftAnalysisPage() {
         />
         <StatBlock label="Recommended" value="1-3°" hint="Michigan molder standards" />
         <StatBlock
-          label="DFM Score"
+          label="Moldability score"
           value={`${dfmData.overall_score}/100`}
           hint={dfmData.summary}
           tone={dfmData.overall_score < 50 ? 'bad' : dfmData.overall_score < 70 ? 'warn' : 'good'}

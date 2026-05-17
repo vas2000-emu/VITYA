@@ -71,7 +71,7 @@ export function ResultsDashboard() {
             {liveResults && (
               <span
                 className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-wider rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                title="Scores sourced from /api/moldsim — live API response"
+                title="Scores updated live from the built-in simulator"
               >
                 <Activity className="size-3" />
                 Live API
@@ -120,7 +120,7 @@ export function ResultsDashboard() {
             }}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Re-run moldsim API analysis"
+            title="Re-run the analysis"
           >
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="text-sm">Re-analyze</span>

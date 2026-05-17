@@ -49,7 +49,7 @@ export function QuoteModal({
   const handleConfirm = () => {
     setPhase('confirmed')
     toast.success('Ready to send', {
-      description: `Email or call ${shop.name} with your DFM report when you're ready. (Demo — no message actually sent.)`,
+      description: `Email or call ${shop.name} with your moldability report when you're ready. (Demo — no message actually sent.)`,
     })
     setTimeout(() => onClose(), 1200)
   }
@@ -95,7 +95,7 @@ export function QuoteModal({
             <div className="flex items-center gap-3 py-3">
               <Loader2 className="size-4 animate-spin text-violet-300" />
               <div className="text-sm text-zinc-300">
-                Bundling DFM report for {shop.name}…
+                Packaging your moldability report for {shop.name}…
               </div>
             </div>
           )}
@@ -123,7 +123,7 @@ export function QuoteModal({
 
               <div className="text-[11px] text-zinc-500 leading-relaxed">
                 Estimate is non-binding. Final pricing depends on the shop&apos;s
-                own DFM review, current capacity, and resin pricing.
+                own review of your part, current capacity, and material pricing.
               </div>
             </>
           )}

@@ -25,8 +25,8 @@ import { useResultsStore } from '@/store/useResultsStore'
 import { getDashboardAnalysis, partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { DesignProposal, PartId } from '@/lib/types'
 
-type Tab = 'Part' | 'Evaluate' | 'AI Suggestions'
-const TABS: Tab[] = ['Part', 'Evaluate', 'AI Suggestions']
+type Tab = 'Part' | 'Evaluate' | 'AI optimizations'
+const TABS: Tab[] = ['Part', 'Evaluate', 'AI optimizations']
 
 export function Toolbar() {
   const [activeTab, setActiveTab] = useState<Tab>('Part')
@@ -62,7 +62,7 @@ export function Toolbar() {
     }
     const url = URL.createObjectURL(file)
     setUploadedSTL(url)
-    toast.success(`Loaded ${file.name}`, { description: 'DFM heatmap regenerated.' })
+    toast.success(`Loaded ${file.name}`, { description: 'Moldability heatmap regenerated.' })
     e.target.value = ''
   }
   const handleClearUpload = () => {
@@ -122,7 +122,7 @@ export function Toolbar() {
           />
         )}
         {activeTab === 'Evaluate' && <EvaluateRibbon />}
-        {activeTab === 'AI Suggestions' && (
+        {activeTab === 'AI optimizations' && (
           <MarkupRibbon
             suggestions={aiPartSuggestions.items}
             loading={aiPartSuggestions.loading}

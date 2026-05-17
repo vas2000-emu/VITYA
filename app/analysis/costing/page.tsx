@@ -152,7 +152,7 @@ export default function CostingPage() {
     return (
       <AnalysisPageLayout
         title="Costing"
-        subtitle="Calculating cost estimates based on MoldSim physics models..."
+        subtitle="Working out how much this part will cost to make..."
         icon={DollarSign}
         accent="emerald"
       >
@@ -188,7 +188,7 @@ export default function CostingPage() {
   return (
     <AnalysisPageLayout
       title="Costing"
-      subtitle="Estimated tooling and per-part cost for this geometry, based on Michigan injection-molding norms and MoldSim physics models."
+      subtitle="What it will cost to make this part: tooling up front, plus the price per piece. Numbers are based on typical Michigan injection-molding rates."
       icon={DollarSign}
       accent="emerald"
       isRefetching={isLoading}
@@ -292,7 +292,7 @@ export default function CostingPage() {
 
       <Section
         title="Production metrics"
-        description="Throughput and efficiency estimates from MoldSim"
+        description="How fast the mold runs and how many parts per hour you'll get"
       >
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           {[

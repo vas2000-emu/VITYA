@@ -60,7 +60,7 @@ export function LoadingScreen() {
             </span>
             <div>
               <h2 className="text-sm font-medium text-zinc-100">Analyzing part</h2>
-              <p className="text-xs text-zinc-500">DFM checks + supplier-readiness sweep</p>
+              <p className="text-xs text-zinc-500">Checking moldability + finding local shops</p>
             </div>
           </div>
 

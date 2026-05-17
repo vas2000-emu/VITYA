@@ -78,14 +78,14 @@ export function ViewportToolbar({ partName }: { partName: string }) {
           onClick={toggleViewportGrid}
         />
         <IconBtn
-          title={viewportHeatmap ? 'Hide DFM heatmap' : 'Show DFM heatmap'}
+          title={viewportHeatmap ? 'Hide moldability heatmap' : 'Show moldability heatmap'}
           icon={<Palette className="size-4" />}
           active={viewportHeatmap}
           onClick={toggleViewportHeatmap}
         />
         <span className="h-5 w-px bg-zinc-700 mx-1" />
         <IconBtn
-          title="Part only — DFM heatmap"
+          title="Part only — moldability heatmap"
           icon={<Box className="size-4" />}
           active={viewportMoldMode === 'part'}
           onClick={() => setMold('part')}

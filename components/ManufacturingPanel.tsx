@@ -104,7 +104,7 @@ export function ManufacturingPanel() {
 
       setSimulationResults({ dfm, cost, cooling, filling, isLoading: false, error: null })
       toast.success('Full simulation complete', {
-        description: `Cost, cooling, filling refreshed. DFM ${dfm.overall_score}/100.`,
+        description: `Cost, cooling, filling refreshed. Moldability ${dfm.overall_score}/100.`,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Analysis failed'
@@ -261,7 +261,7 @@ export function ManufacturingPanel() {
           stay from the last "Re-run Analysis" press (they need API). */}
       <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/50">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-zinc-500">Live DFM</span>
+          <span className="text-xs text-zinc-500">Live moldability</span>
           <span className="text-[10px] uppercase tracking-wider text-zinc-600 inline-flex items-center gap-1">
             <CheckCircle2 className="size-3 text-emerald-400/80" />
             in sync with parameters
@@ -269,7 +269,7 @@ export function ManufacturingPanel() {
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2 rounded bg-zinc-800/50">
-            <div className="text-zinc-400">DFM Score</div>
+            <div className="text-zinc-400">Moldability score</div>
             <div
               className={`font-medium ${
                 live.score >= 70
@@ -320,7 +320,7 @@ export function ManufacturingPanel() {
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200 flex items-start gap-3">
             <CheckCircle2 className="size-4 mt-0.5 shrink-0" />
             <div>
-              <div className="font-medium">No DFM issues at current settings.</div>
+              <div className="font-medium">No moldability issues at current settings.</div>
               <div className="text-xs text-emerald-300/80 mt-1">{live.summary}</div>
             </div>
           </div>

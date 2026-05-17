@@ -34,7 +34,7 @@ export function SimulationStatusHud() {
         <div>
           <div className="font-mono text-sm leading-none">{score}</div>
           <div className="text-[10px] uppercase tracking-wider opacity-80 leading-tight">
-            DFM score · {issueCount} issue{issueCount === 1 ? '' : 's'}
+            Moldability · {issueCount} issue{issueCount === 1 ? '' : 's'}
           </div>
         </div>
       </div>

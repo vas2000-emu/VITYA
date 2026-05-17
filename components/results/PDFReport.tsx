@@ -276,7 +276,7 @@ export function MoldLocalReport({
           <View>
             <Text style={styles.brand}>MoldLocal · Michigan readiness report</Text>
             <Text style={styles.brandSub}>
-              AI-assisted DFM analysis for injection molding
+              AI-assisted moldability report for injection-molded parts
             </Text>
           </View>
           <View style={styles.meta}>
