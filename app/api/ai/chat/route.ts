@@ -69,7 +69,7 @@ Answer in 2-3 sentences of plain English unless the user asks for more detail.`
  *  Tells the model to emit MULTIPLE distinct propose_design_change tool calls
  *  rather than a single conversational reply, so the panel can render the
  *  result as a row of independent suggestion cards. */
-const SUGGESTIONS_ADDENDUM = `\n\nYou are being asked to generate a panel of design optimizations, not to chat. Emit 2-3 SEPARATE propose_design_change tool calls covering DIFFERENT angles (e.g. one for moldability, one for cost, one for material). Each call should be self-contained with its own title and rationale. Do not produce conversational text alongside the tool calls — the panel only renders the proposals.`
+const SUGGESTIONS_ADDENDUM = `\n\nYou are being asked to generate a panel of design optimizations, not to chat. Emit 2-3 SEPARATE propose_design_change tool calls covering DIFFERENT design angles (e.g. one for moldability, one for dimensions, one for material). Each call should be self-contained with its own title and rationale. Do NOT propose changes to numCavities or productionQuantity here — those are production/cost levers, not design changes, and the panel only shows geometry-affecting recommendations. Do not produce conversational text alongside the tool calls — the panel only renders the proposals.`
 
 interface DfmIssueHint {
   severity: string
@@ -490,10 +490,14 @@ interface ToolCall {
  *  short-circuit, let the conversation loop continue". Keeps the POST
  *  handler's cyclomatic complexity flat as new short-circuit tools
  *  are added. */
-function shortCircuitFor(toolCalls: ToolCall[], rawContent: string | null) {
+function shortCircuitFor(
+  toolCalls: ToolCall[],
+  rawContent: string | null,
+  intent: 'chat' | 'suggestions' | undefined,
+) {
   return (
     maybeCustomPartResponse(toolCalls, rawContent) ??
-    maybeProposalResponse(toolCalls, rawContent)
+    maybeProposalResponse(toolCalls, rawContent, intent)
   )
 }
 
@@ -524,13 +528,27 @@ function maybeCustomPartResponse(toolCalls: ToolCall[], rawContent: string | nul
  *  Single proposal call -> `{reply, proposal}` (inline-chat shape).
  *  Multiple proposal calls -> `{reply, proposals: [...]}` (suggestion-panel shape).
  *  The client uses whichever key is present. */
-function maybeProposalResponse(toolCalls: ToolCall[], rawContent: string | null) {
+function maybeProposalResponse(
+  toolCalls: ToolCall[],
+  rawContent: string | null,
+  intent: 'chat' | 'suggestions' | undefined,
+) {
   const proposalCalls = toolCalls.filter((c) => c.function.name === 'propose_design_change')
   if (proposalCalls.length === 0) return null
   const replyText = rawContent?.trim() ?? ''
-  const proposals = proposalCalls
+  let proposals = proposalCalls
     .map((c) => parseProposal(c.function.arguments || '{}', c.id))
     .filter((p): p is DesignProposal => p !== null)
+  // In suggestions mode the panel only renders geometry-affecting
+  // changes — drop proposals whose every change is a business lever
+  // (numCavities / productionQuantity) so we don't show the user a
+  // "Reduce Production Cost" card that does nothing visible to the 3D
+  // model. Chat mode keeps these intact so a user can still explicitly
+  // ask "switch to 4 cavities".
+  if (intent === 'suggestions') {
+    const BUSINESS_ONLY: Set<DesignField> = new Set(['numCavities', 'productionQuantity'])
+    proposals = proposals.filter((p) => p.changes.some((c) => !BUSINESS_ONLY.has(c.field)))
+  }
   if (proposals.length === 0) {
     return NextResponse.json({
       reply: replyText || '(proposal was malformed; please retry)',
@@ -644,7 +662,7 @@ export async function POST(req: NextRequest) {
       // If the model proposed a design change, short-circuit the
       // tool-loop and return the proposal alongside any text the model
       // produced. The user's accept/reject is the next step.
-      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null)
+      const shortCircuit = shortCircuitFor(toolCalls, message.content as string | null, body.intent)
       if (shortCircuit) return shortCircuit
 
       // Push the assistant's tool-call message before the tool outputs.
