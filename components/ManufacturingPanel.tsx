@@ -37,6 +37,7 @@ export function ManufacturingPanel() {
     simulationParams,
     simulationResults,
     setSimulationResults,
+    currentPartId,
   } = useAppStore()
 
   // Live DFM data — derived synchronously from simulationParams so any
@@ -174,9 +175,14 @@ export function ManufacturingPanel() {
       }
 
       // Use the dashboard's PDF route — it owns the layout and pulls
-      // from the current part's analysis. Workspace doesn't track which
-      // part the dashboard is on, so default to 'bracket' here.
-      window.open('/api/report?partId=bracket', '_blank', 'noopener')
+      // from the current part's analysis. currentPartId is kept in sync
+      // by useResultsStore.selectPart, so the export tracks the part
+      // the user is actually viewing.
+      window.open(
+        `/api/report?partId=${encodeURIComponent(currentPartId)}`,
+        '_blank',
+        'noopener',
+      )
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to export report'
       toast.error('Export failed', { description: message })

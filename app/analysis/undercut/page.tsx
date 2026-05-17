@@ -86,7 +86,7 @@ export default function UndercutAnalysisPage() {
   // break this out, so we derive it.
   const undercutCost = hasUndercuts ? simulationParams.numUndercuts * UNDERCUT_TOOLING_PER : 0
 
-  if (isLoading) {
+  if (isLoading && !dfmData) {
     return (
       <AnalysisPageLayout
         title="Undercut Analysis"
@@ -131,6 +131,7 @@ export default function UndercutAnalysisPage() {
       subtitle="Find geometry that would trap a single-pull mold and require side actions, lifters, or tooling complications that drive up cost and lead time."
       icon={Box}
       accent="rose"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock

@@ -160,6 +160,19 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     // snake_case shape; simulationParams uses camelCase — map across.
     const inputs = partSimInputs[id]
     if (inputs) {
+      // Reset the scaling baseline FIRST so the dimension-derived
+      // fields (volume/weight/projectedArea) lock onto this preset's
+      // numbers when we push the patch below.
+      app.setSimulationBaseline({
+        material: inputs.material,
+        wallThickness: inputs.wall_thickness,
+        partVolume: inputs.part_volume,
+        partWeight: inputs.part_weight,
+        projectedArea: inputs.projected_area,
+        partLength: inputs.part_length,
+        partWidth: inputs.part_width,
+        partHeight: inputs.part_height,
+      })
       app.updateSimulationParams({
         material: inputs.material,
         wallThickness: inputs.wall_thickness,

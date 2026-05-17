@@ -401,6 +401,16 @@ export const useAppStore = create<AppState>((set) => ({
     hasSharpCorners: false,
     hasUniformWall: false,
   },
+  simulationBaseline: {
+    material: 'PP',
+    wallThickness: 3,
+    partVolume: 1200,
+    partWeight: 1100,
+    projectedArea: 6500,
+    partLength: 1700,
+    partWidth: 450,
+    partHeight: 380,
+  },
   simulationResults: {
     cost: null,
     cooling: null,
@@ -411,8 +421,13 @@ export const useAppStore = create<AppState>((set) => ({
   },
   updateSimulationParams: (params) =>
     set((s) => ({
-      simulationParams: { ...s.simulationParams, ...params },
+      simulationParams: deriveScaledSimParams(
+        s.simulationParams,
+        params,
+        s.simulationBaseline,
+      ),
     })),
+  setSimulationBaseline: (b) => set({ simulationBaseline: b }),
   setSimulationResults: (results) =>
     set((s) => ({
       simulationResults: { ...s.simulationResults, ...results },

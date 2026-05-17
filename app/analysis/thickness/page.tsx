@@ -15,7 +15,11 @@ import {
   type FillingResponse,
 } from '@/lib/moldsim-api'
 
-const MAX_RECOMMENDED_FLOW_RATIO = 200
+// Engine returns flow_ratio = flowLength / maxFlowLength (dimensionless,
+// ~0–1+). It marks the part is_fillable when ratio < 0.8 (SAFETY_FACTOR in
+// lib/moldsim/filling.ts). Anything above 1 means the cavity physically
+// can't fill from a single gate with the material's flow capability.
+const FILL_SAFETY_THRESHOLD = 0.8
 
 export default function ThicknessAnalysisPage() {
   const { simulationParams, setSimulationResults } = useAppStore()
@@ -61,7 +65,7 @@ export default function ThicknessAnalysisPage() {
     fetchAnalysisData()
   }, [simulationParams, setSimulationResults])
 
-  if (isLoading) {
+  if (isLoading && (!coolingData || !fillingData)) {
     return (
       <AnalysisPageLayout
         title="Thickness Analysis"
@@ -95,24 +99,21 @@ export default function ThicknessAnalysisPage() {
   }
 
   const hasThicknessIssues = simulationParams.wallThickness < 1.0 || simulationParams.wallThickness > 5.0
-  const hasFlowIssues = !fillingData.is_fillable || fillingData.flow_ratio > MAX_RECOMMENDED_FLOW_RATIO
+  const hasFlowIssues = !fillingData.is_fillable || fillingData.flow_ratio > FILL_SAFETY_THRESHOLD
   const hasCoolingRecs = coolingData.recommendations.length > 0
+  const flowUtilizationPct = fillingData.flow_ratio * 100
 
   let overallStatus: { label: string; tone: 'good' | 'warn' | 'bad' }
   if (hasThicknessIssues || hasFlowIssues) overallStatus = { label: 'Warning', tone: 'warn' }
   else if (hasCoolingRecs) overallStatus = { label: 'Attention', tone: 'warn' }
   else overallStatus = { label: 'Good', tone: 'good' }
 
-  // The flat cooling response gives us cycle_time and cooling_time. We
-  // derive fill / packing time as conventional fractions for the
-  // breakdown card (purely cosmetic — real values would need a melt
-  // flow simulation we don't have here).
-  const fillFraction = 0.05
-  const packFraction = 0.25
-  const coolingFraction = 1 - fillFraction - packFraction
-  const fillTime = coolingData.cycle_time * fillFraction
-  const packTime = coolingData.cycle_time * packFraction
-  const coolingPortion = Math.max(coolingData.cooling_time, coolingData.cycle_time * coolingFraction)
+  // Mirror the breakdown used inside lib/moldsim/cooling.ts so the
+  // numbers shown here reconcile with the engine's cycle_time exactly.
+  // (cooling.ts: fill 2.0s, pack = cooling*0.3, openClose 3.0s, eject 1.5s.)
+  const fillTime = 2.0
+  const packTime = coolingData.cooling_time * 0.3
+  const coolingPortion = coolingData.cooling_time
   const cyclesPerHour = coolingData.cycle_time > 0 ? 3600 / coolingData.cycle_time : 0
 
   return (
@@ -121,6 +122,7 @@ export default function ThicknessAnalysisPage() {
       subtitle="Analyze wall thickness impact on fill behavior, cooling time, and cycle time. Wall thickness should usually stay between 2.0 mm and 3.5 mm for most materials."
       icon={Layers3}
       accent="sky"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock
@@ -135,10 +137,10 @@ export default function ThicknessAnalysisPage() {
           hint="Time for center to reach ejection temp"
         />
         <StatBlock
-          label="Flow ratio"
-          value={`${fillingData.flow_ratio.toFixed(0)}:1`}
-          hint={`Max recommended: ${MAX_RECOMMENDED_FLOW_RATIO}:1`}
-          tone={fillingData.flow_ratio > MAX_RECOMMENDED_FLOW_RATIO ? 'bad' : undefined}
+          label="Flow utilization"
+          value={`${flowUtilizationPct.toFixed(0)}%`}
+          hint={`Safe-fill threshold: ${(FILL_SAFETY_THRESHOLD * 100).toFixed(0)}%`}
+          tone={hasFlowIssues ? 'bad' : undefined}
         />
         <StatBlock label="Status" value={overallStatus.label} tone={overallStatus.tone} />
       </div>
@@ -237,10 +239,11 @@ export default function ThicknessAnalysisPage() {
               <li className="flex items-start gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
                 <AlertTriangle className="size-5 text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-sm font-medium text-rose-300">Flow ratio out of range</div>
+                  <div className="text-sm font-medium text-rose-300">Flow length near material limit</div>
                   <div className="text-sm text-zinc-400">
-                    {fillingData.flow_ratio.toFixed(0)}:1 exceeds the {MAX_RECOMMENDED_FLOW_RATIO}:1
-                    ceiling for {coolingData.material}. Add a second gate or thicken walls.
+                    Flow utilization at {flowUtilizationPct.toFixed(0)}% exceeds the{' '}
+                    {(FILL_SAFETY_THRESHOLD * 100).toFixed(0)}% safe-fill threshold for{' '}
+                    {coolingData.material}. Add a second gate or thicken walls.
                   </div>
                 </div>
               </li>
