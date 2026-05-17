@@ -129,9 +129,51 @@ export function checkManufacturability(
     score -= 15;
   }
   
+  // Maximum dimension feasibility. The largest commercial injection
+  // molding presses (e.g. ENGEL duo 1700, KraussMaffei MX 4000) handle
+  // parts up to ~1500-2000mm in their longest dimension. Most regional
+  // shops cap out far lower (~600-800mm). We tier the check:
+  //   >2000mm  → critical: exceeds every commercial press
+  //   >1500mm  → critical: only mega-presses; effectively un-quotable
+  //   > 800mm  → warning:  excludes most regional shops
+  const dims = [request.part_length, request.part_width, request.part_height].filter(
+    (d): d is number => typeof d === 'number' && d > 0
+  );
+  if (dims.length > 0) {
+    const maxDim = Math.max(...dims);
+    if (maxDim > 2000) {
+      issues.push({
+        severity: 'critical',
+        category: 'Part Size',
+        issue: `Largest dimension of ${maxDim.toFixed(0)}mm exceeds injection-molding press capacity`,
+        recommendation: 'Split the part into sub-assemblies or use a different manufacturing process (rotomolding, thermoforming).',
+        estimated_cost_impact: 'Cannot be molded as a single part — redesign required.',
+      });
+      score -= 60;
+    } else if (maxDim > 1500) {
+      issues.push({
+        severity: 'critical',
+        category: 'Part Size',
+        issue: `Largest dimension of ${maxDim.toFixed(0)}mm requires a mega-press`,
+        recommendation: 'Only a handful of presses worldwide can shoot this. Consider splitting the part or contacting a Tier-1 automotive molder.',
+        estimated_cost_impact: 'Very High - tooling + press time will be $250k+',
+      });
+      score -= 40;
+    } else if (maxDim > 800) {
+      issues.push({
+        severity: 'warning',
+        category: 'Part Size',
+        issue: `Largest dimension of ${maxDim.toFixed(0)}mm exceeds most regional shops`,
+        recommendation: 'Few local Michigan shops can mold parts this size. Expect a narrower supplier pool and longer lead times.',
+        estimated_cost_impact: 'Medium - limits supplier options, raises tooling cost.',
+      });
+      score -= 15;
+    }
+  }
+
   // Aspect ratio check (if dimensions provided)
   if (request.part_length && request.part_width) {
-    const aspectRatio = Math.max(request.part_length, request.part_width) / 
+    const aspectRatio = Math.max(request.part_length, request.part_width) /
                         Math.min(request.part_length, request.part_width);
     if (aspectRatio > 4) {
       issues.push({

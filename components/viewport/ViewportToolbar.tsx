@@ -85,19 +85,19 @@ export function ViewportToolbar({ partName }: { partName: string }) {
         />
         <span className="h-5 w-px bg-zinc-700 mx-1" />
         <IconBtn
-          title="Show part only"
+          title="Part only — DFM heatmap"
           icon={<Box className="size-4" />}
           active={viewportMoldMode === 'part'}
           onClick={() => setMold('part')}
         />
         <IconBtn
-          title="Show part + transparent mold"
+          title="Part (checker) + translucent mold"
           icon={<Layers className="size-4" />}
           active={viewportMoldMode === 'both'}
           onClick={() => setMold('both')}
         />
         <IconBtn
-          title="Show mold only (hide part)"
+          title="Mold tooling view — part shown as UV checker placeholder"
           icon={<Container className="size-4" />}
           active={viewportMoldMode === 'mold'}
           onClick={() => setMold('mold')}

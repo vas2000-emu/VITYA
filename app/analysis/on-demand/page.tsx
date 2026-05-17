@@ -15,59 +15,7 @@ import {
   type CostResponse,
 } from '@/lib/moldsim-api'
 import { QuoteModal } from '@/components/analysis/QuoteModal'
-
-const SHOPS = [
-  {
-    name: 'Great Lakes Plastics',
-    location: 'Grand Rapids, MI',
-    zip: '49503',
-    capability: 'Single-cavity prototype + bridge tooling',
-    leadTime: '4-5 weeks',
-    notes: 'Strong on small-to-medium snap-fit parts. Comfortable with side actions.',
-    minScore: 60,
-  },
-  {
-    name: 'Detroit Mold & Tool',
-    location: 'Sterling Heights, MI',
-    zip: '48312',
-    capability: 'Production tooling, multi-cavity',
-    leadTime: '8-10 weeks',
-    notes: 'Best fit once volumes pass 25k pieces and the geometry is fixed.',
-    minScore: 70,
-  },
-  {
-    name: 'Lakeshore IM',
-    location: 'Holland, MI',
-    zip: '49423',
-    capability: 'Engineering grade resins, glass-filled',
-    leadTime: '5-6 weeks',
-    notes: 'Pick this shop if the part switches to glass-filled nylon later.',
-    minScore: 65,
-  },
-  {
-    name: 'Midwest Precision Molding',
-    location: 'Kalamazoo, MI',
-    zip: '49001',
-    capability: 'Low-volume production, rapid prototyping',
-    leadTime: '3-4 weeks',
-    notes: 'Great for fast turnaround on simpler geometries. Limited side-action capability.',
-    minScore: 75,
-  },
-]
-
-// Distance proxy: first 3 digits of a ZIP cluster geographically in the
-// US. Without a real geocoder we rank by the absolute integer
-// difference of the prefix — close enough for "show me nearby molders"
-// in a Michigan-only marketplace.
-function rankByZipProximity<T extends { zip: string }>(shops: T[], userZip: string): T[] {
-  const target = parseInt(userZip.slice(0, 3), 10)
-  if (Number.isNaN(target)) return shops
-  return [...shops].sort((a, b) => {
-    const da = Math.abs(parseInt(a.zip.slice(0, 3), 10) - target)
-    const db = Math.abs(parseInt(b.zip.slice(0, 3), 10) - target)
-    return da - db
-  })
-}
+import { LOCAL_SHOPS as SHOPS, rankByZipProximity } from '@/lib/localShops'
 
 export default function OnDemandManufacturingPage() {
   const { simulationParams, setSimulationResults } = useAppStore()
@@ -94,6 +42,7 @@ export default function OnDemandManufacturingPage() {
             has_uniform_wall: simulationParams.hasUniformWall,
             part_length: simulationParams.partLength,
             part_width: simulationParams.partWidth,
+            part_height: simulationParams.partHeight,
           }),
           calculateCost({
             part_volume: simulationParams.partVolume,
@@ -127,8 +76,8 @@ export default function OnDemandManufacturingPage() {
   if (isLoading) {
     return (
       <AnalysisPageLayout
-        title="On Demand Manufacturing"
-        subtitle="Checking quote readiness for Michigan-area injection molders..."
+        title="Local Manufacturing"
+        subtitle="Checking design readiness against Michigan-area injection molders..."
         icon={Factory}
         accent="violet"
       >
@@ -143,8 +92,8 @@ export default function OnDemandManufacturingPage() {
   if (error || !dfmData) {
     return (
       <AnalysisPageLayout
-        title="On Demand Manufacturing"
-        subtitle="Quote readiness for Michigan-area injection molders"
+        title="Local Manufacturing"
+        subtitle="Design readiness against Michigan-area injection molders"
         icon={Factory}
         accent="violet"
       >
@@ -159,9 +108,9 @@ export default function OnDemandManufacturingPage() {
 
   const dfmScore = dfmData.overall_score
   let readiness: { status: string; tone: 'good' | 'warn' | 'bad' }
-  if (dfmScore >= 80) readiness = { status: 'Ready for quotes', tone: 'good' }
-  else if (dfmScore >= 60) readiness = { status: 'Needs improvement', tone: 'warn' }
-  else readiness = { status: 'Not quote-ready', tone: 'bad' }
+  if (dfmScore >= 80) readiness = { status: 'Design-ready', tone: 'good' }
+  else if (dfmScore >= 60) readiness = { status: 'Needs refinement', tone: 'warn' }
+  else readiness = { status: 'Not yet design-ready', tone: 'bad' }
 
   const rankedShops = /^\d{5}$/.test(userZip) ? rankByZipProximity(SHOPS, userZip) : SHOPS
   const eligibleShops = rankedShops.filter((shop) => dfmScore >= shop.minScore)
@@ -187,8 +136,8 @@ export default function OnDemandManufacturingPage() {
 
   return (
     <AnalysisPageLayout
-      title="On Demand Manufacturing"
-      subtitle="Quote-readiness for Michigan-area injection molders. Once the design fixes land, these shops can take the file and turn around tooling without an in-person DFM review."
+      title="Local Manufacturing"
+      subtitle="When your design is ready, here are Michigan-area injection molders you could hand it to. The DFM score on this page tells you whether the part will need rework before a shop will accept the file."
       icon={Factory}
       accent="violet"
     >
@@ -202,11 +151,11 @@ export default function OnDemandManufacturingPage() {
         <StatBlock
           label="DFM Score"
           value={`${dfmScore}/100`}
-          hint="Michigan molder compatibility"
+          hint="Design readiness"
           tone={dfmScore >= 70 ? 'good' : dfmScore >= 50 ? 'warn' : 'bad'}
         />
         <StatBlock
-          label="Eligible shops"
+          label="Shops that fit"
           value={String(eligibleShops.length)}
           hint={`Of ${SHOPS.length} in 150mi range`}
           tone={eligibleShops.length >= 3 ? 'good' : eligibleShops.length > 0 ? 'warn' : 'bad'}
@@ -214,15 +163,15 @@ export default function OnDemandManufacturingPage() {
         <StatBlock
           label="Best lead time"
           value={bestLeadTime ? bestLeadTime.leadTime.split('-')[0] + ' wk' : 'N/A'}
-          hint={bestLeadTime ? bestLeadTime.name : 'No eligible shops'}
+          hint={bestLeadTime ? bestLeadTime.name : 'Refine design to unlock shops'}
           tone={bestLeadTime ? 'good' : 'bad'}
         />
       </div>
 
       {costData && (
         <Section
-          title="Quote estimate"
-          description="Based on MoldSim cost analysis"
+          title="What this part will cost to mold"
+          description="Estimate from the design's geometry and material — use this as a starting point when reaching out to a shop."
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 rounded-lg bg-zinc-800/50">
@@ -265,8 +214,8 @@ export default function OnDemandManufacturingPage() {
         title="Candidate shops"
         description={
           eligibleShops.length > 0
-            ? 'Click a shop to request a quote for the current design'
-            : 'Improve DFM score to unlock shops'
+            ? 'Click a shop to see a non-binding cost estimate for this design'
+            : 'Refine the design to unlock more shop options'
         }
       >
         <div className="flex items-center gap-2 mb-4 -mx-1">
@@ -333,9 +282,9 @@ export default function OnDemandManufacturingPage() {
                     onClick={() => setQuoteShop(shop)}
                     disabled={!isEligible}
                     className="px-2.5 py-1 text-[11px] bg-violet-600 hover:bg-violet-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    title={isEligible ? `Request a quote from ${shop.name}` : `Improve DFM score to ${shop.minScore}+ to unlock`}
+                    title={isEligible ? `See an estimate for ${shop.name}` : `Refine design to ${shop.minScore}+ DFM before reaching out`}
                   >
-                    Request Quote
+                    See estimate
                   </button>
                 </div>
               </li>
@@ -346,8 +295,8 @@ export default function OnDemandManufacturingPage() {
 
       {actionItems.length > 0 && (
         <Section
-          title="What needs to happen before quoting"
-          description="Items the shop will flag during their own DFM review"
+          title="Fix these before handing off"
+          description="Items a molder would flag the moment they open your file"
         >
           <ul className="space-y-2 text-sm text-zinc-200">
             {actionItems.map((item) => (
@@ -376,13 +325,14 @@ export default function OnDemandManufacturingPage() {
           <div>
             {dfmScore >= 70 ? (
               <>
-                Your design is ready for quotes. Click <strong>Request Quote</strong> on any
-                eligible shop above to start the handshake.
+                Your design is in good shape. Click <strong>See estimate</strong> on any shop
+                above for a non-binding cost preview, then reach out by email or phone when
+                you&apos;re ready to hand off.
               </>
             ) : (
               <>
-                Apply the recommended design fixes to reach a DFM score of 70+, then request
-                quotes from the candidate shops above.
+                Keep iterating in the workspace — the AI assistant and DFM heatmap will flag
+                what to change. Aim for a DFM score of 70+ before reaching out to a shop.
               </>
             )}
           </div>

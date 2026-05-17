@@ -101,16 +101,17 @@ export function LandingPage() {
             </div>
 
             <h1 className="text-4xl lg:text-5xl font-bold leading-tight">
-              AI-Powered Parametric CAD
+              Design for the mold,
               <span className="block mt-2 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                for Injection Molding
+                before you cut steel.
               </span>
             </h1>
 
             <p className="text-lg text-zinc-400 max-w-xl">
-              MoldLocal is a next-generation solution that gives you AI-assisted parametric
-              modeling, real-time manufacturing analysis, and intelligent design suggestions
-              for your everyday engineering needs.
+              MoldLocal helps you iterate a plastic part toward something a local injection
+              molder can actually build. See the cavity, core, and parting line your geometry
+              implies. Catch undercuts, draft, and wall-thickness issues before tooling
+              quotes come back twice as expensive.
             </p>
           </div>
 

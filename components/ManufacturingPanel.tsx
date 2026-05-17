@@ -3,11 +3,9 @@
 import { useState } from 'react'
 import {
   AlertTriangle,
-  CheckCircle,
+  CheckCircle2,
   AlertCircle,
   XCircle,
-  ChevronDown,
-  ChevronRight,
   PanelRightClose,
   PanelRight,
   Loader2,
@@ -17,79 +15,23 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
-import type { ManufacturingIssue, IssueType } from '@/lib/types'
 import { checkManufacturing, calculateCost, calculateCooling, calculateFilling } from '@/lib/moldsim-api'
+import { useLiveDfmScore, type LiveDfmSeverity } from './viewport/useLiveDfmScore'
 
-const issueIcons: Record<IssueType, React.ReactNode> = {
-  error: <XCircle className="size-4 text-red-400" />,
+const severityIcon: Record<LiveDfmSeverity, React.ReactNode> = {
+  critical: <XCircle className="size-4 text-red-400" />,
   warning: <AlertTriangle className="size-4 text-yellow-400" />,
-  success: <CheckCircle className="size-4 text-green-400" />,
   info: <AlertCircle className="size-4 text-blue-400" />,
 }
 
-const issueBgColors: Record<IssueType, string> = {
-  error: 'bg-red-500/10 border-red-500/30',
+const severityBg: Record<LiveDfmSeverity, string> = {
+  critical: 'bg-red-500/10 border-red-500/30',
   warning: 'bg-yellow-500/10 border-yellow-500/30',
-  success: 'bg-green-500/10 border-green-500/30',
   info: 'bg-blue-500/10 border-blue-500/30',
-}
-
-interface IssueItemProps {
-  issue: ManufacturingIssue
-}
-
-function IssueItem({ issue }: IssueItemProps) {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className={`border rounded-lg overflow-hidden ${issueBgColors[issue.type]}`}>
-      <button
-        type="button"
-        className="w-full flex items-start gap-3 p-3 text-left hover:bg-white/5"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {issueIcons[issue.type]}
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-zinc-400 mb-0.5">{issue.category}</div>
-          <div className="text-sm font-medium">{issue.title}</div>
-          {issue.location && (
-            <div className="text-xs text-zinc-500 mt-1 font-mono">{issue.location}</div>
-          )}
-        </div>
-        <span className="p-0.5">
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 pt-0 border-t border-white/10 space-y-2 mt-2">
-          <div className="text-sm text-zinc-300">{issue.description}</div>
-          {issue.suggestion && (
-            <div className="px-3 py-2 bg-zinc-900/50 rounded text-xs">
-              <div className="text-zinc-400 mb-1">Suggestion:</div>
-              <div className="text-zinc-300">{issue.suggestion}</div>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() =>
-              toast(`Highlighting ${issue.location ?? issue.title} in 3D View`, {
-                description: '(Demo — viewport highlight not yet wired)',
-              })
-            }
-            className="w-full px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"
-          >
-            Highlight in 3D View
-          </button>
-        </div>
-      )}
-    </div>
-  )
 }
 
 export function ManufacturingPanel() {
   const {
-    manufacturingIssues,
     rightCollapsed,
     setRightCollapsed,
     simulationParams,
@@ -97,13 +39,19 @@ export function ManufacturingPanel() {
     setSimulationResults,
   } = useAppStore()
 
+  // Live DFM data — derived synchronously from simulationParams so any
+  // edit to the Parameters or Simulation Settings panels reflects
+  // immediately here (no Run button needed). Cost/cooling/filling
+  // still live in simulationResults because they require API calls.
+  const live = useLiveDfmScore()
+
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false)
 
-  const errorCount = manufacturingIssues.filter((i) => i.type === 'error').length
-  const warningCount = manufacturingIssues.filter((i) => i.type === 'warning').length
-  const successCount = manufacturingIssues.filter((i) => i.type === 'success').length
+  const errorCount = live.issues.filter((i) => i.severity === 'critical').length
+  const warningCount = live.issues.filter((i) => i.severity === 'warning').length
+  const infoCount = live.issues.filter((i) => i.severity === 'info').length
 
   /** Run the four moldsim endpoints in parallel and stash the responses
    *  in simulationResults. Field names match the actual request shapes
@@ -123,6 +71,7 @@ export function ManufacturingPanel() {
           has_uniform_wall: simulationParams.hasUniformWall,
           part_length: simulationParams.partLength,
           part_width: simulationParams.partWidth,
+          part_height: simulationParams.partHeight,
         }),
         calculateCost({
           part_volume: simulationParams.partVolume,
@@ -153,8 +102,8 @@ export function ManufacturingPanel() {
       ])
 
       setSimulationResults({ dfm, cost, cooling, filling, isLoading: false, error: null })
-      toast.success('Analysis complete', {
-        description: `DFM score ${dfm.overall_score}/100 — see results below.`,
+      toast.success('Full simulation complete', {
+        description: `Cost, cooling, filling refreshed. DFM ${dfm.overall_score}/100.`,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Analysis failed'
@@ -288,92 +237,95 @@ export function ManufacturingPanel() {
         <div className="flex gap-3 text-xs">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-red-400" />
-            <span>{errorCount} errors</span>
+            <span>{errorCount} critical</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-yellow-400" />
-            <span>{warningCount} warnings</span>
+            <span>{warningCount} warning</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-green-400" />
-            <span>{successCount} passed</span>
+            <div className="w-2 h-2 rounded-full bg-blue-400" />
+            <span>{infoCount} info</span>
           </div>
         </div>
       </div>
 
-      {/* MoldSim summary card */}
-      {(simulationResults.cost || simulationResults.dfm) && (
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/50">
-          <div className="text-xs text-zinc-500 mb-2">MoldSim Results</div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {simulationResults.dfm && (
-              <div className="p-2 rounded bg-zinc-800/50">
-                <div className="text-zinc-400">DFM Score</div>
-                <div
-                  className={`font-medium ${
-                    simulationResults.dfm.overall_score >= 70
-                      ? 'text-emerald-400'
-                      : simulationResults.dfm.overall_score >= 50
-                        ? 'text-amber-400'
-                        : 'text-rose-400'
-                  }`}
-                >
-                  {simulationResults.dfm.overall_score}/100
-                </div>
-              </div>
-            )}
-            {simulationResults.cost && (
-              <div className="p-2 rounded bg-zinc-800/50">
-                <div className="text-zinc-400">Per-part</div>
-                <div className="font-medium text-zinc-100">
-                  ${simulationResults.cost.total_cost_per_part.toFixed(2)}
-                </div>
-              </div>
-            )}
-            {simulationResults.cooling && (
-              <div className="p-2 rounded bg-zinc-800/50">
-                <div className="text-zinc-400">Cycle time</div>
-                <div className="font-medium text-zinc-100">
-                  {simulationResults.cooling.cycle_time.toFixed(1)}s
-                </div>
-              </div>
-            )}
-            {simulationResults.cost && (
-              <div className="p-2 rounded bg-zinc-800/50">
-                <div className="text-zinc-400">Tooling</div>
-                <div className="font-medium text-zinc-100">
-                  ${(simulationResults.cost.total_tooling_cost / 1000).toFixed(1)}k
-                </div>
-              </div>
-            )}
-          </div>
+      {/* Summary card — DFM score updates synchronously off
+          simulationParams via useLiveDfmScore. Cost / cycle / tooling
+          stay from the last "Re-run Analysis" press (they need API). */}
+      <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/50">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-zinc-500">Live DFM</span>
+          <span className="text-[10px] uppercase tracking-wider text-zinc-600 inline-flex items-center gap-1">
+            <CheckCircle2 className="size-3 text-emerald-400/80" />
+            in sync with parameters
+          </span>
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="p-2 rounded bg-zinc-800/50">
+            <div className="text-zinc-400">DFM Score</div>
+            <div
+              className={`font-medium ${
+                live.score >= 70
+                  ? 'text-emerald-400'
+                  : live.score >= 50
+                    ? 'text-amber-400'
+                    : 'text-rose-400'
+              }`}
+            >
+              {live.score}/100
+            </div>
+          </div>
+          {simulationResults.cost && (
+            <div className="p-2 rounded bg-zinc-800/50">
+              <div className="text-zinc-400">Per-part</div>
+              <div className="font-medium text-zinc-100">
+                ${simulationResults.cost.total_cost_per_part.toFixed(2)}
+              </div>
+            </div>
+          )}
+          {simulationResults.cooling && (
+            <div className="p-2 rounded bg-zinc-800/50">
+              <div className="text-zinc-400">Cycle time</div>
+              <div className="font-medium text-zinc-100">
+                {simulationResults.cooling.cycle_time.toFixed(1)}s
+              </div>
+            </div>
+          )}
+          {simulationResults.cost && (
+            <div className="p-2 rounded bg-zinc-800/50">
+              <div className="text-zinc-400">Tooling</div>
+              <div className="font-medium text-zinc-100">
+                ${(simulationResults.cost.total_tooling_cost / 1000).toFixed(1)}k
+              </div>
+            </div>
+          )}
+        </div>
+        {!simulationResults.cost && (
+          <div className="text-[11px] text-zinc-500 mt-2">
+            Press <RefreshCw className="inline size-3 -mt-0.5" /> to also pull cost,
+            cooling, and filling numbers.
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {manufacturingIssues.map((issue) => (
-          <IssueItem key={issue.id} issue={issue} />
-        ))}
-
-        {/* Live DFM issues from the moldsim API. severity → UI color. */}
-        {simulationResults.dfm?.issues.map((issue) => {
-          const issueKey = `${issue.category}-${issue.issue}`
-          const bg =
-            issue.severity === 'critical'
-              ? issueBgColors.error
-              : issue.severity === 'warning'
-                ? issueBgColors.warning
-                : issueBgColors.info
-          const icon =
-            issue.severity === 'critical'
-              ? issueIcons.error
-              : issue.severity === 'warning'
-                ? issueIcons.warning
-                : issueIcons.info
-          return (
-            <div key={issueKey} className={`border rounded-lg overflow-hidden ${bg}`}>
+        {live.issues.length === 0 ? (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200 flex items-start gap-3">
+            <CheckCircle2 className="size-4 mt-0.5 shrink-0" />
+            <div>
+              <div className="font-medium">No DFM issues at current settings.</div>
+              <div className="text-xs text-emerald-300/80 mt-1">{live.summary}</div>
+            </div>
+          </div>
+        ) : (
+          live.issues.map((issue, idx) => (
+            <div
+              key={`${issue.category}-${idx}`}
+              className={`border rounded-lg overflow-hidden ${severityBg[issue.severity]}`}
+            >
               <div className="flex items-start gap-3 p-3">
-                {icon}
+                {severityIcon[issue.severity]}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-zinc-400 mb-0.5 capitalize">{issue.severity}</div>
                   <div className="text-sm font-medium">{issue.category}</div>
@@ -382,8 +334,8 @@ export function ManufacturingPanel() {
                 </div>
               </div>
             </div>
-          )
-        })}
+          ))
+        )}
       </div>
 
       <div className="p-4 border-t border-zinc-800 space-y-2">

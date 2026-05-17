@@ -168,6 +168,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
         projectedArea: inputs.projected_area,
         partLength: inputs.part_length,
         partWidth: inputs.part_width,
+        partHeight: inputs.part_height,
         meltTemp: inputs.melt_temp,
         moldTemp: inputs.mold_temp,
         productionQuantity: inputs.production_quantity,
@@ -178,6 +179,14 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
         hasSharpCorners: inputs.has_sharp_corners,
         hasUniformWall: inputs.has_uniform_wall,
       })
+      // A6: sync the Parameters-panel values so the left-panel UI
+      // reflects the part you just loaded instead of bracket-era
+      // defaults.
+      app.updateParameterValue('p-len', inputs.part_length)
+      app.updateParameterValue('p-wid', inputs.part_width)
+      app.updateParameterValue('p-height', inputs.part_height)
+      app.updateParameterValue('p-wall', inputs.wall_thickness)
+      app.updateParameterValue('p-draft', inputs.min_draft_angle)
     }
     // Fire the moldsim API for the new part. simulateToken bump inside
     // runMoldsim cancels any earlier in-flight run.

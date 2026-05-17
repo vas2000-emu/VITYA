@@ -30,9 +30,14 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
     prompt: 'Are the draft angles on this part sufficient for clean ejection?',
   },
   {
-    label: 'Optimize',
+    label: 'Explain the mold',
     prompt:
-      'How can I optimize this part for cheaper, faster Michigan injection molding?',
+      'Walk me through the mold for this part — cavity, core, parting line, and gate. What should I be thinking about?',
+  },
+  {
+    label: 'Find local shops',
+    prompt:
+      'Once this part is design-ready, which local shops could build it? My ZIP is 49503.',
   },
 ]
 

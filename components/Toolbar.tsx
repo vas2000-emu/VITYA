@@ -140,7 +140,6 @@ export function Toolbar() {
             active={showManufacturing}
           />
           <RibbonLink href="/results" icon={FileText} label="Reports" />
-          <RibbonLink href="/shop" icon={Factory} label="Molder Portal" />
           <RibbonButton
             onClick={logout}
             icon={LogOut}
@@ -258,7 +257,7 @@ function EvaluateRibbon() {
         <RibbonLink
           href="/analysis/on-demand"
           icon={Factory}
-          label="On Demand Manufacturing"
+          label="Local Manufacturing"
         />
         <RibbonLink href="/results" icon={ClipboardCheck} label="Part Reviewer" />
       </RibbonGroup>
