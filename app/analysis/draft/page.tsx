@@ -60,7 +60,7 @@ export default function DraftAnalysisPage() {
     ) ?? []
   const criticalDraft = draftIssues.filter((i) => i.severity === 'critical' || i.severity === 'warning')
 
-  if (isLoading) {
+  if (isLoading && !dfmData) {
     return (
       <AnalysisPageLayout
         title="Draft Analysis"
@@ -105,6 +105,7 @@ export default function DraftAnalysisPage() {
       subtitle="Check that vertical faces are tapered enough for the part to release cleanly from the mold cavity. Most Michigan molders look for at least 1-3 degrees of draft on shut-off surfaces."
       icon={Triangle}
       accent="amber"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock

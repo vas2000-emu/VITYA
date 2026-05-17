@@ -73,7 +73,7 @@ export default function OnDemandManufacturingPage() {
     fetchData()
   }, [simulationParams, setSimulationResults])
 
-  if (isLoading) {
+  if (isLoading && !dfmData) {
     return (
       <AnalysisPageLayout
         title="Local Manufacturing"
@@ -140,6 +140,7 @@ export default function OnDemandManufacturingPage() {
       subtitle="When your design is ready, here are Michigan-area injection molders you could hand it to. The DFM score on this page tells you whether the part will need rework before a shop will accept the file."
       icon={Factory}
       accent="violet"
+      isRefetching={isLoading}
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <StatBlock
