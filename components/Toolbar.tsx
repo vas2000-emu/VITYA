@@ -354,13 +354,15 @@ function RibbonGroup({
   )
 }
 
-// Ribbon entries are full-height cards inside the 88-px ribbon row.
-// Icon goes flush with the top padding, label goes flush with the
-// bottom padding, and the middle flex-1 spacer eats whatever vertical
-// room is left so single-line labels and three-line labels still
-// share the same top / bottom baselines across the row.
+// Ribbon entries are full-height cards inside the ribbon row. Icons
+// glue to the top padding of every card (uniform top axis across the
+// row) and the label sits a fixed 12 px below — close enough to feel
+// related, far enough not to crowd the icon. Variable-length labels
+// just extend further down inside the same fixed-height button; we
+// no longer try to bottom-align them because that left huge dead
+// space under single-line labels.
 const RIBBON_CARD =
-  'flex h-full w-[78px] flex-col items-center rounded px-1 py-2 transition-colors'
+  'flex h-full w-[78px] flex-col items-center justify-start gap-3 rounded px-1 py-2 transition-colors'
 const RIBBON_LABEL = 'text-[11px] leading-tight text-center break-words'
 
 function RibbonLink({
@@ -375,7 +377,6 @@ function RibbonLink({
   return (
     <Link href={href} className={`${RIBBON_CARD} text-zinc-300 hover:bg-zinc-800`} title={label}>
       <Icon className="size-6 text-zinc-300" />
-      <span className="flex-1" aria-hidden />
       <span className={`${RIBBON_LABEL} text-zinc-400`}>{label}</span>
     </Link>
   )
@@ -401,7 +402,6 @@ function RibbonButton({
       title={label}
     >
       <Icon className="size-6" />
-      <span className="flex-1" aria-hidden />
       <span className={RIBBON_LABEL}>{label}</span>
     </button>
   )
