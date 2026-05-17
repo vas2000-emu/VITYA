@@ -8,7 +8,7 @@ import { Html } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { useResultsStore } from '@/store/useResultsStore'
 import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
-import { buildCustomGeometry, getPartGeometry, type PartId } from './partGeometry'
+import { buildCsgGeometry, buildCustomGeometry, getPartGeometry, type PartId } from './partGeometry'
 import { useDebouncedGeometryParams } from './useDebouncedGeometryParams'
 import { MoldCheckerMaterial } from './MoldCheckerMaterial'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
@@ -57,6 +57,24 @@ export function Part() {
     // user-registered AI part can have a unique id (for sidebar /
     // ribbon highlighting) while still rendering through this path.
     if (customPartSpec) {
+      // CSG path: spec carries a constructive tree (e.g. box minus
+      // cylinder). Evaluate via three-bvh-csg.
+      if (customPartSpec.csg) {
+        const geom = buildCsgGeometry(customPartSpec.csg)
+        // Fit the CSG result into the spec's bbox so the camera and
+        // dimensions still agree. Compute bbox + non-uniform scale.
+        geom.computeBoundingBox()
+        const box = geom.boundingBox!
+        const size = new THREE.Vector3()
+        box.getSize(size)
+        const sx = size.x > 0 ? customPartSpec.partLength / size.x : 1
+        const sy = size.y > 0 ? customPartSpec.partHeight / size.y : 1
+        const sz = size.z > 0 ? customPartSpec.partWidth / size.z : 1
+        geom.scale(sx, sy, sz)
+        geom.computeVertexNormals()
+        geom.computeBoundingBox()
+        return geom
+      }
       const geom = buildCustomGeometry(
         customPartSpec.shape,
         customPartSpec.partLength,

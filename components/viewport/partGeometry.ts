@@ -9,9 +9,10 @@ import * as THREE from 'three'
  * are only used when no `uploadedSTL` is set in the store.
  */
 
-import type { CustomPartShape } from '@/lib/types'
+import { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh-csg'
+import type { CsgNode, CustomPartShape, DemoPartId } from '@/lib/types'
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper' | 'custom'
+export type PartId = DemoPartId | 'custom' | (string & {})
 
 /** Live geometry inputs. Defaults reflect the bumper hero baseline so
  *  loading without params yields the same look as before this change.
@@ -397,6 +398,93 @@ function roundedPath(halfL: number, halfW: number, r: number): THREE.Path {
   return path
 }
 
+/** Donut. length/width are the major-diameter X/Z axes; height controls
+ *  the tube diameter. */
+function buildCustomTorusGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // Build a unit torus then non-uniformly scale into the requested bbox.
+  // tubeRadius = height/2 (so the donut "rises" by exactly height).
+  // majorRadius is just 0.5 (unit), then scale.x/scale.z stretch it.
+  const tubeR = 0.5 // pre-scale
+  const majorR = 0.5
+  const geom = new THREE.TorusGeometry(majorR, tubeR, 24, 64)
+  // Torus is built in XY plane; rotate so it lies flat (axis along Y).
+  geom.rotateX(Math.PI / 2)
+  geom.scale(length, height, width)
+  return geom
+}
+
+function buildCustomConeGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  const baseRadius = 0.5
+  const geom = new THREE.ConeGeometry(baseRadius, height, 48, 1, false)
+  geom.scale(length, 1, width)
+  return geom
+}
+
+function buildCustomSphereGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  const geom = new THREE.SphereGeometry(0.5, 32, 24)
+  geom.scale(length, height, width)
+  return geom
+}
+
+function buildCustomDomeGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // Hemisphere — open bottom.
+  const geom = new THREE.SphereGeometry(0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2)
+  geom.scale(length, height * 2, width)
+  geom.translate(0, -height / 2, 0)
+  return geom
+}
+
+function buildCustomHexPrismGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // 6-sided prism (hexagonal cross-section) extruded along Y.
+  // CylinderGeometry with 6 radialSegments gives us a hex.
+  const baseRadius = 0.5
+  const geom = new THREE.CylinderGeometry(baseRadius, baseRadius, height, 6, 1, false)
+  geom.scale(length, 1, width)
+  return geom
+}
+
+function buildCustomRingGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // Hollow flat ring (washer-style). Outer radius = 0.5, hole = 0.3.
+  // height controls the ring's thickness along Y.
+  const outerR = 0.5
+  const innerR = 0.3
+  const geom = new THREE.CylinderGeometry(outerR, outerR, height, 48, 1, false)
+  // Use CSG to punch the inner hole so applyParams doesn't double-scale
+  // a ring of holes. Build the punch as a slightly-taller inner cylinder.
+  const inner = new THREE.CylinderGeometry(innerR, innerR, height * 1.05, 48, 1, false)
+  const out = new Brush(geom)
+  const cut = new Brush(inner)
+  const ev = new Evaluator()
+  const result = ev.evaluate(out, cut, SUBTRACTION)
+  const ringGeom = result.geometry
+  ringGeom.scale(length, 1, width)
+  return ringGeom
+}
+
 /** Dispatch to the right parameterized primitive. Returns a centered
  *  geometry whose bbox is exactly L × H × W; applyParams in the caller
  *  applies draft + per-axis scaling on top. */
@@ -416,7 +504,66 @@ export function buildCustomGeometry(
       return buildCustomPlateGeometry(length, height, width)
     case 'shell':
       return buildCustomShellGeometry(length, height, width, wallThickness)
+    case 'torus':
+      return buildCustomTorusGeometry(length, height, width)
+    case 'cone':
+      return buildCustomConeGeometry(length, height, width)
+    case 'sphere':
+      return buildCustomSphereGeometry(length, height, width)
+    case 'dome':
+      return buildCustomDomeGeometry(length, height, width)
+    case 'hex_prism':
+      return buildCustomHexPrismGeometry(length, height, width)
+    case 'ring':
+      return buildCustomRingGeometry(length, height, width)
   }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CSG — constructive solid geometry. The AI can compose primitives via
+// union / subtract / intersect ops in a tree (CsgNode). Each leaf is a
+// primitive built via buildCustomGeometry, then translated; each
+// operation feeds two children into three-bvh-csg's Evaluator.
+// ────────────────────────────────────────────────────────────────────
+
+const csgEvaluator = new Evaluator()
+csgEvaluator.useGroups = false
+
+const CSG_OPS = {
+  union: ADDITION,
+  subtract: SUBTRACTION,
+  intersect: INTERSECTION,
+} as const
+
+function evaluateCsgNode(node: CsgNode): THREE.BufferGeometry {
+  if (node.kind === 'primitive') {
+    const geom = buildCustomGeometry(
+      node.shape,
+      node.length,
+      node.height,
+      node.width,
+      node.wallThickness ?? 2,
+    )
+    if (node.translate) {
+      geom.translate(node.translate.x ?? 0, node.translate.y ?? 0, node.translate.z ?? 0)
+    }
+    return geom
+  }
+  const a = new Brush(evaluateCsgNode(node.a))
+  const b = new Brush(evaluateCsgNode(node.b))
+  a.updateMatrixWorld()
+  b.updateMatrixWorld()
+  const result = csgEvaluator.evaluate(a, b, CSG_OPS[node.op])
+  // Detach the geometry from the temporary Brush so callers can dispose
+  // the brush wrappers freely.
+  return result.geometry.clone()
+}
+
+export function buildCsgGeometry(root: CsgNode): THREE.BufferGeometry {
+  const geom = evaluateCsgNode(root)
+  geom.computeVertexNormals()
+  geom.computeBoundingBox()
+  return geom
 }
 
 // Placeholder builder so the BUILDERS table type-checks; the actual
@@ -426,25 +573,27 @@ function buildCustomFallbackGeometry(): THREE.BufferGeometry {
   return buildCustomBoxGeometry(100, 50, 80)
 }
 
-const BUILDERS: Record<PartId, () => THREE.BufferGeometry> = {
+// Demo-part builders only; custom parts go through buildCustomGeometry.
+const BUILDERS: Record<DemoPartId, () => THREE.BufferGeometry> = {
   bracket: buildBracketGeometry,
   phoneCase: buildPhoneCaseGeometry,
   droneArm: buildDroneArmGeometry,
   bumper: buildBumperGeometry,
-  custom: buildCustomFallbackGeometry,
 }
 
 // Cache only the un-parameterized baseline. Parameter-driven variants
 // are derived on the fly so changing a slider yields a fresh geometry.
-const cache = new Map<PartId, THREE.BufferGeometry>()
+const cache = new Map<DemoPartId, THREE.BufferGeometry>()
 
 function getBaseGeometry(id: PartId): THREE.BufferGeometry {
-  let geom = cache.get(id)
+  const demoId = id as DemoPartId
+  if (!(demoId in BUILDERS)) return buildCustomFallbackGeometry()
+  let geom = cache.get(demoId)
   if (!geom) {
-    geom = BUILDERS[id]()
+    geom = BUILDERS[demoId]()
     geom.computeVertexNormals()
     geom.computeBoundingBox()
-    cache.set(id, geom)
+    cache.set(demoId, geom)
   }
   return geom
 }

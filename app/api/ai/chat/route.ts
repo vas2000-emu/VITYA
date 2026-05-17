@@ -3,6 +3,7 @@ import { findLocalShops } from '@/lib/localShops'
 import {
   ALLOWED_MATERIALS,
   type AllowedMaterial,
+  type CsgNode,
   type CustomPartShape,
   type CustomPartSpec,
   type DesignChange,
@@ -10,7 +11,21 @@ import {
   type DesignProposal,
 } from '@/lib/types'
 
-const CUSTOM_PART_SHAPES: CustomPartShape[] = ['box', 'cylinder', 'plate', 'shell']
+const CUSTOM_PART_SHAPES: CustomPartShape[] = [
+  'box',
+  'cylinder',
+  'plate',
+  'shell',
+  'torus',
+  'cone',
+  'sphere',
+  'dome',
+  'hex_prism',
+  'ring',
+]
+
+const CSG_OP_NAMES = ['union', 'subtract', 'intersect'] as const
+type CsgOpName = (typeof CSG_OP_NAMES)[number]
 
 // Server-side route — process.env.OPENAI_API_KEY is never sent to the
 // browser. The frontend POSTs the conversation history here and gets
@@ -32,7 +47,19 @@ Include 1-3 changes per proposal. Always pair the tool call with a brief text re
 
 If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension), ask one focused follow-up question first instead of guessing.
 
-If the designer asks to CREATE a new part ("make me a phone case for an iPhone 15", "generate a mounting plate", "start a new bracket"), call the create_part_from_description tool. Pick the closest primitive shape, supply realistic mm dimensions, and a short label. Don't use this when they're asking about the part they already have — only for new parts.
+If the designer asks to CREATE a new part ("make me a phone case", "generate a mounting plate", "build a bracket with a hole through it"), call the create_part_from_description tool. Two ways to describe the shape:
+  - Single primitive: pick the closest from box / cylinder / plate / shell / torus / cone / sphere / dome / hex_prism / ring. For a donut, pick torus. For a hex nut, hex_prism. For a flat washer, ring.
+  - Composite via the optional \`csg\` tree: USE THIS whenever the part has a feature that needs subtraction or union (e.g. "block with a hole" -> box minus cylinder; "ring with a slot" -> cylinder minus cylinder minus box). The shape field is still required as a fallback but the renderer uses the csg tree when present.
+
+When the description includes "with a hole", "minus", "through", "slot", or any feature you can't express with a single primitive, ALWAYS build a csg tree. Example for "50x50x20mm block with a 20mm cylindrical hole through the middle":
+  shape: "box", partLength: 50, partWidth: 50, partHeight: 20,
+  csg: {
+    kind: "operation", op: "subtract",
+    a: { kind: "primitive", shape: "box", length: 50, width: 50, height: 20 },
+    b: { kind: "primitive", shape: "cylinder", length: 20, width: 20, height: 22 }
+  }
+
+Always supply realistic mm dimensions and a short label. Don't use this when the user is asking about the part they already have — only for new parts.
 
 If the designer asks about local manufacturing options (e.g. "who can make this near me", "find a local shop", "where can I get this molded"), call the find_local_shops tool. Only call it on explicit request — don't push shops unprompted.
 
@@ -154,15 +181,31 @@ const TOOLS = [
     function: {
       name: 'create_part_from_description',
       description:
-        "Create a brand-new part from the designer's description (e.g. 'iPhone 15 case', 'mounting plate for a 5x3 sensor'). Pick the closest primitive shape from the allowed enum and supply realistic dimensions in mm. The viewport renders the procedural geometry, the workspace runs a full moldsim analysis against it, and the designer can iterate on the parameters afterwards. Use this only when the user explicitly asks to create or generate a part — not when they're asking about the part they already have.",
+        "Create a brand-new part from the designer's description (e.g. 'iPhone 15 case', 'donut', 'block with a 10mm hole through the center'). Pick the closest primitive shape OR compose primitives via the optional `csg` tree (union / subtract / intersect). The viewport renders the result, the workspace runs a full moldsim analysis against it, and the designer can iterate. Use this only when the user explicitly asks to create or generate a part.",
       parameters: {
         type: 'object',
         properties: {
           shape: {
             type: 'string',
             enum: CUSTOM_PART_SHAPES,
+            description: [
+              'Which primitive to render as a fallback (used when `csg` is omitted). Pick the closest match:',
+              '- box: solid rectangular block',
+              '- cylinder: round / oval cross-section (length + width = X / Z diameters)',
+              '- plate: flat panel (height small relative to L / W)',
+              '- shell: hollow container with open top (phone case, cup, tray)',
+              '- torus: donut (length + width = X / Z major diameter, height = tube diameter)',
+              '- cone: tapered cylinder',
+              '- sphere: ellipsoid',
+              '- dome: hemisphere, open bottom',
+              '- hex_prism: 6-sided prism (nuts, hex caps)',
+              '- ring: flat washer / hollow disc',
+            ].join('\n'),
+          },
+          csg: {
+            type: 'object',
             description:
-              'Which primitive to render. "box" = solid rectangular block, "cylinder" = round/oval cross-section (use partLength + partWidth as the two diameters), "plate" = flat panel (height should be small relative to L/W), "shell" = hollow rounded container with an open top (phone-case / cup style).',
+              'Optional constructive-solid-geometry tree. Use when a single primitive cannot describe the part (e.g. "block with a hole", "ring with two slots"). The renderer evaluates the tree with three-bvh-csg. A leaf is `{ kind: "primitive", shape, length, width, height, translate?, wallThickness? }`. An operation is `{ kind: "operation", op: "union"|"subtract"|"intersect", a: <node>, b: <node> }`. Translate dimensions are in mm relative to part center.',
           },
           label: {
             type: 'string',
@@ -172,12 +215,12 @@ const TOOLS = [
             type: 'string',
             description: 'Optional one-sentence summary of what this part is for.',
           },
-          partLength: { type: 'number', description: 'Length along world X in mm.' },
-          partWidth: { type: 'number', description: 'Width / depth along world Z in mm.' },
-          partHeight: { type: 'number', description: 'Height along world Y in mm.' },
+          partLength: { type: 'number', description: 'Final bounding-box length along world X in mm.' },
+          partWidth: { type: 'number', description: 'Final bounding-box width along world Z in mm.' },
+          partHeight: { type: 'number', description: 'Final bounding-box height along world Y in mm.' },
           wallThickness: {
             type: 'number',
-            description: 'Wall / shell thickness in mm. Affects the shell primitive visually; affects DFM scoring for all shapes.',
+            description: 'Wall / shell thickness in mm. Affects the shell primitive visually + DFM scoring for all shapes.',
           },
           material: {
             type: 'string',
@@ -271,11 +314,61 @@ function parseChange(raw: unknown): DesignChange | null {
   return { field: f, value }
 }
 
+/** Walk an unknown JSON value emitted by the AI's optional `csg` field
+ *  and return a typed CsgNode tree (or null for any malformation). All
+ *  primitive leaves must use shapes from the strict enum + have
+ *  positive finite dimensions; operations need both children to parse. */
+function parseCsgNode(raw: unknown, depth = 0): CsgNode | null {
+  // Cap recursion to keep a runaway AI response from stack-overflowing
+  // the renderer; 6 levels covers any reasonable hand-composed tree.
+  if (depth > 6 || typeof raw !== 'object' || raw === null) return null
+  const kind = (raw as { kind?: unknown }).kind
+  if (kind === 'primitive') {
+    const shape = (raw as { shape?: unknown }).shape
+    const length = (raw as { length?: unknown }).length
+    const width = (raw as { width?: unknown }).width
+    const height = (raw as { height?: unknown }).height
+    const wallThickness = (raw as { wallThickness?: unknown }).wallThickness
+    const translate = (raw as { translate?: unknown }).translate
+    if (!CUSTOM_PART_SHAPES.includes(shape as CustomPartShape)) return null
+    for (const d of [length, width, height]) {
+      if (typeof d !== 'number' || !Number.isFinite(d) || d <= 0) return null
+    }
+    const node: CsgNode = {
+      kind: 'primitive',
+      shape: shape as CustomPartShape,
+      length: length as number,
+      width: width as number,
+      height: height as number,
+    }
+    if (typeof wallThickness === 'number' && Number.isFinite(wallThickness) && wallThickness > 0) {
+      node.wallThickness = wallThickness
+    }
+    if (translate && typeof translate === 'object') {
+      const t = translate as { x?: unknown; y?: unknown; z?: unknown }
+      const tx = typeof t.x === 'number' && Number.isFinite(t.x) ? t.x : 0
+      const ty = typeof t.y === 'number' && Number.isFinite(t.y) ? t.y : 0
+      const tz = typeof t.z === 'number' && Number.isFinite(t.z) ? t.z : 0
+      if (tx || ty || tz) node.translate = { x: tx, y: ty, z: tz }
+    }
+    return node
+  }
+  if (kind === 'operation') {
+    const op = (raw as { op?: unknown }).op
+    if (!CSG_OP_NAMES.includes(op as CsgOpName)) return null
+    const a = parseCsgNode((raw as { a?: unknown }).a, depth + 1)
+    const b = parseCsgNode((raw as { b?: unknown }).b, depth + 1)
+    if (!a || !b) return null
+    return { kind: 'operation', op: op as CsgOpName, a, b }
+  }
+  return null
+}
+
 /** Validate a raw create_part_from_description tool blob into a
  *  CustomPartSpec. All numerics must be finite + positive; material
- *  must be in the allowed list; shape must be in the strict enum.
- *  Returns null for any mismatch so the client never receives a
- *  half-formed spec the renderer can't build. */
+ *  must be in the allowed list; shape must be in the strict enum;
+ *  optional `csg` tree validates via parseCsgNode. Returns null for
+ *  any mismatch so the client never receives a half-formed spec. */
 function parseCustomPart(raw: string): CustomPartSpec | null {
   let parsed: Record<string, unknown>
   try {
@@ -298,8 +391,12 @@ function parseCustomPart(raw: string): CustomPartSpec | null {
   for (const d of dims) {
     if (typeof d !== 'number' || !Number.isFinite(d) || d <= 0) return null
   }
+  // CSG tree is optional — silently drop a malformed tree, fall back
+  // to the single-primitive shape.
+  const csg = parsed.csg ? parseCsgNode(parsed.csg) : null
   return {
     shape: shape as CustomPartShape,
+    csg: csg ?? undefined,
     label: label.slice(0, 120),
     description: typeof description === 'string' ? description.slice(0, 400) : undefined,
     partLength: partLength as number,

@@ -167,13 +167,55 @@ export type PartId = DemoPartId | 'custom' | (string & {})
 
 /** Allowed primitive shapes for AI-generated parts. Strict enum so the
  *  renderer never receives a shape it can't build. */
-export type CustomPartShape = 'box' | 'cylinder' | 'plate' | 'shell'
+export type CustomPartShape =
+  | 'box'
+  | 'cylinder'
+  | 'plate'
+  | 'shell'
+  | 'torus'
+  | 'cone'
+  | 'sphere'
+  | 'dome'
+  | 'hex_prism'
+  | 'ring'
+
+/** Constructive solid geometry tree. Each node is either a primitive
+ *  (leaf) or a boolean operation on two child trees. The AI can emit
+ *  these via the create_part_from_description tool's optional `csg`
+ *  field to compose parts that can't be expressed as a single
+ *  primitive (e.g. "block with a cylindrical hole"). */
+export type CsgPrimitive = {
+  kind: 'primitive'
+  shape: CustomPartShape
+  /** Bounding-box dimensions in mm. */
+  length: number
+  width: number
+  height: number
+  /** Translation along world X / Y / Z in mm, applied after shaping. */
+  translate?: { x?: number; y?: number; z?: number }
+  /** Wall thickness in mm. Only used by the 'shell' primitive. */
+  wallThickness?: number
+}
+
+export type CsgOperation = {
+  kind: 'operation'
+  op: 'union' | 'subtract' | 'intersect'
+  a: CsgNode
+  b: CsgNode
+}
+
+export type CsgNode = CsgPrimitive | CsgOperation
 
 /** Spec emitted by the AI's create_part_from_description tool and held
  *  in useAppStore.customPartSpec. Dimensions are all mm; the geometry
- *  builder scales the primitive into those exact dimensions. */
+ *  builder scales the primitive (or CSG tree) into those exact
+ *  dimensions. */
 export interface CustomPartSpec {
+  /** Single-primitive shape. Ignored if `csg` is set. */
   shape: CustomPartShape
+  /** Optional CSG tree. When present, the geometry is built by
+   *  applying the boolean ops; `shape` is treated as a fallback. */
+  csg?: CsgNode
   /** Human label, e.g. "iPhone 15 case" or "5x3 mounting plate". */
   label: string
   /** One-sentence description for context / display. */

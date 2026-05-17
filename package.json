@@ -65,6 +65,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.3.1",
     "three": "^0.184.0",
+    "three-bvh-csg": "^0.0.18",
     "three-mesh-bvh": "^0.9.10",
     "three-stdlib": "^2.36.1",
     "vaul": "^1.1.2",
@@ -72,7 +73,9 @@
     "zustand": "^5.0.13"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["sharp"]
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
   },
   "devDependencies": {
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.0",
