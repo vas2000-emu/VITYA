@@ -370,7 +370,7 @@ function RibbonLink({
       title={label}
     >
       <Icon className="size-6 text-zinc-300 shrink-0" />
-      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words min-h-[2.5rem] flex items-start justify-center">
+      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words flex-1 flex items-center justify-center min-h-[2.5rem]">
         {label}
       </span>
     </Link>
@@ -399,7 +399,7 @@ function RibbonButton({
       title={label}
     >
       <Icon className="size-6 shrink-0" />
-      <span className="text-[11px] leading-tight text-center break-words min-h-[2.5rem] flex items-start justify-center">
+      <span className="text-[11px] leading-tight text-center break-words flex-1 flex items-center justify-center min-h-[2.5rem]">
         {label}
       </span>
     </button>
