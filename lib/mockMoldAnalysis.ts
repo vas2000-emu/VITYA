@@ -5,9 +5,8 @@ import type { MoldAnalysisResult, PartId } from '@/lib/types'
 //
 // This file stands in for the future backend response. When the CAD parsing /
 // AI suggestions / supplier-readiness pipeline lands, replace this with a
-// real fetch and feed the response through `adaptBackendResponse` from
-// `lib/backendAdapter.ts` (which maps the backend JSON shape into the
-// `MoldAnalysisResult` shape consumed by the dashboard components).
+// real fetch and adapt the response into the `MoldAnalysisResult` shape
+// consumed by the dashboard components.
 //
 // Hotspot `top` / `left` percentages are positioned over the part-preview
 // SVG in `components/results/PartPreview.tsx`. The backend should send
