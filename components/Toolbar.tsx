@@ -366,7 +366,7 @@ function RibbonLink({
   return (
     <Link
       href={href}
-      className="flex flex-col items-center justify-start gap-[5px] w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
+      className="flex flex-col items-center justify-between w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
       title={label}
     >
       <Icon className="size-6 text-zinc-300 shrink-0" />
@@ -391,7 +391,7 @@ function RibbonButton({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-start gap-[5px] w-[78px] px-1 py-2 rounded transition-colors ${
+      className={`flex flex-col items-center justify-between w-[78px] px-1 py-2 rounded transition-colors ${
         active
           ? 'bg-blue-600/80 hover:bg-blue-600 text-white'
           : 'hover:bg-zinc-800 text-zinc-300'
