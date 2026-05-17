@@ -59,12 +59,9 @@ interface ResultsState {
    *  drives the loading screen, and overrides `analysis` scores with
    *  API-derived values (cost, dfm score, cycle time). */
   runMoldsim: () => Promise<void>
-  /** Legacy: kept so the LoadingScreen demo still works without API.
-   *  Prefer `runMoldsim` for the real path. */
-  simulateAnalysis: () => Promise<void>
 }
 
-// Module-level token used by simulateAnalysis() to short-circuit stale runs
+// Module-level token used by runMoldsim() to short-circuit stale runs
 // when a newer simulate is kicked off (e.g. user clicks Re-analyze twice fast,
 // or switches parts mid-load).
 let simulateToken = 0
@@ -204,24 +201,6 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     // Fire the moldsim API for the new part. simulateToken bump inside
     // runMoldsim cancels any earlier in-flight run.
     void get().runMoldsim()
-  },
-
-  simulateAnalysis: async () => {
-    const myToken = ++simulateToken
-    for (const phase of LOADING_PHASES) {
-      if (myToken !== simulateToken) return // a newer run replaced us
-      set({ loading: true, loadingPhase: phase.label })
-      await new Promise((r) => setTimeout(r, phase.ms))
-    }
-    if (myToken !== simulateToken) return
-    set({
-      loading: false,
-      loadingPhase: LOADING_PHASES[0].label,
-      fixedIssueIds: [],
-      pendingFixId: null,
-      showFix: false,
-      selectedIssueId: moldAnalysisData.issues[0]?.id ?? null,
-    })
   },
 
   runMoldsim: async () => {

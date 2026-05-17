@@ -1,15 +1,3 @@
-// Feature types
-export type FeatureType = 'origin' | 'sketch' | 'extrude' | 'revolve' | 'fillet' | 'chamfer' | 'hole' | 'plane'
-
-export interface Feature {
-  id: string
-  name: string
-  type: FeatureType
-  children?: Feature[]
-  visible?: boolean
-  suppressed?: boolean
-}
-
 // Operation types for AI suggestions
 export type OperationType = 'modify' | 'add' | 'delete'
 
@@ -41,19 +29,6 @@ export interface Parameter {
   unit: string
   locked?: boolean
   constraint?: string
-}
-
-// Manufacturing issue types
-export type IssueType = 'error' | 'warning' | 'success' | 'info'
-
-export interface ManufacturingIssue {
-  id: string
-  type: IssueType
-  category: string
-  title: string
-  description: string
-  location?: string
-  suggestion?: string
 }
 
 // Panel types
