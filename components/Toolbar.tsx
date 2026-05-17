@@ -3,6 +3,12 @@
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import {
   AlertTriangle,
   Box,
   ClipboardCheck,
@@ -186,7 +192,17 @@ function PartRibbon({
 }) {
   const partIds = Object.keys(partsLibrary) as Array<Exclude<PartId, 'custom'>>
   const userParts = useAppStore((s) => s.userParts)
+  const removeUserPart = useAppStore((s) => s.removeUserPart)
   const selectUserPart = useResultsStore((s) => s.selectUserPart)
+
+  function handleDelete(id: string) {
+    removeUserPart(id)
+    // If the deleted part was active, fall back to the first demo part.
+    if (currentPartId === id) {
+      onSelectPart(partIds[0])
+    }
+  }
+
   return (
     <>
       <RibbonGroup bordered>
@@ -207,13 +223,26 @@ function PartRibbon({
       {userParts.length > 0 && (
         <RibbonGroup bordered>
           {userParts.map((part) => (
-            <RibbonButton
-              key={part.id}
-              icon={part.kind === 'ai-created' ? Sparkles : Upload}
-              label={part.label}
-              active={currentPartId === part.id}
-              onClick={() => void selectUserPart(part)}
-            />
+            <ContextMenu key={part.id}>
+              <ContextMenuTrigger asChild>
+                <span>
+                  <RibbonButton
+                    icon={part.kind === 'ai-created' ? Sparkles : Upload}
+                    label={part.label}
+                    active={currentPartId === part.id}
+                    onClick={() => void selectUserPart(part)}
+                  />
+                </span>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => handleDelete(part.id)}
+                >
+                  Delete "{part.label}"
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </RibbonGroup>
       )}
