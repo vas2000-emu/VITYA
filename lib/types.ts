@@ -35,10 +35,46 @@ export interface Parameter {
 export type RightPanelType = 'ai' | 'manufacturing'
 
 // Chat
+
+/** Fields the AI assistant is allowed to modify on the part. Kept to a
+ *  small numeric subset so a tool call can be applied with one
+ *  `updateSimulationParams` dispatch and immediately re-rebuild the
+ *  procedural geometry. */
+export type DesignField =
+  | 'wallThickness'
+  | 'minDraftAngle'
+  | 'partLength'
+  | 'partWidth'
+  | 'partHeight'
+
+export interface DesignChange {
+  field: DesignField
+  /** Target value. Units are implied by the field: mm for
+   *  wallThickness / partLength / partWidth / partHeight, degrees for
+   *  minDraftAngle. */
+  value: number
+}
+
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected'
+
+/** An inline action card the AI can drop into chat. The user clicks
+ *  Accept or Reject; Accept fan-outs into one `updateSimulationParams`
+ *  per change and the 3D geometry rebuilds. */
+export interface DesignProposal {
+  id: string
+  title: string
+  rationale: string
+  changes: DesignChange[]
+  status: ProposalStatus
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  /** Optional inline proposal rendered as an action card next to the
+   *  assistant's text. Only ever set on assistant messages. */
+  proposal?: DesignProposal
 }
 
 // ---------------------------------------------------------------------------

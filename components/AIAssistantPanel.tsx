@@ -16,9 +16,30 @@ import { useAppStore } from '@/store/useAppStore'
 import type {
   AISuggestion,
   ChatMessage,
+  DesignChange,
+  DesignField,
+  DesignProposal,
   Operation,
   OperationType,
 } from '@/lib/types'
+
+/** Human-readable labels for the parameter fields the AI can propose
+ *  changes to. Keep these in sync with DesignField in lib/types.ts. */
+const FIELD_LABELS: Record<DesignField, string> = {
+  wallThickness: 'Wall thickness',
+  minDraftAngle: 'Min draft angle',
+  partLength: 'Length',
+  partWidth: 'Width',
+  partHeight: 'Height',
+}
+
+const FIELD_UNITS: Record<DesignField, string> = {
+  wallThickness: 'mm',
+  minDraftAngle: 'deg',
+  partLength: 'mm',
+  partWidth: 'mm',
+  partHeight: 'mm',
+}
 
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   {
@@ -209,8 +230,33 @@ export function AIAssistantPanel() {
     chatMessages,
     isAiThinking,
     addChatMessage,
+    updateChatMessage,
     setAiThinking,
+    simulationParams,
+    updateSimulationParams,
   } = useAppStore()
+
+  /** Apply a proposal's changes to simulationParams. The Parameters
+   *  panel + 3D viewport + live DFM all watch simulationParams, so a
+   *  single dispatch fans out to every dependent surface. Mutating the
+   *  proposal's status in-place on the chat message disables the
+   *  Accept/Reject buttons in the bubble. */
+  const handleAcceptProposal = (messageId: string, proposal: DesignProposal) => {
+    const patch: Record<string, number> = {}
+    for (const change of proposal.changes) {
+      patch[change.field] = change.value
+    }
+    updateSimulationParams(patch)
+    updateChatMessage(messageId, {
+      proposal: { ...proposal, status: 'accepted' },
+    })
+  }
+
+  const handleRejectProposal = (messageId: string, proposal: DesignProposal) => {
+    updateChatMessage(messageId, {
+      proposal: { ...proposal, status: 'rejected' },
+    })
+  }
 
   const sendMessage = async (overrideText?: string) => {
     const text = (overrideText ?? message).trim()
@@ -230,9 +276,21 @@ export function AIAssistantPanel() {
             ...chatMessages.map(({ role, content }) => ({ role, content })),
             userMsg,
           ],
+          // Snapshot the part state so the model can quote real numbers
+          // (e.g. "your wall is 3 mm; drop to 2.5 mm to..."). Only fields
+          // the propose tool can edit + material for context.
+          context: {
+            material: simulationParams.material,
+            wallThickness: simulationParams.wallThickness,
+            minDraftAngle: simulationParams.minDraftAngle,
+            partLength: simulationParams.partLength,
+            partWidth: simulationParams.partWidth,
+            partHeight: simulationParams.partHeight,
+            numUndercuts: simulationParams.numUndercuts,
+          },
         }),
       })
-      const data = await res.json()
+      const data = await res.json() as { reply?: string; proposal?: DesignProposal; error?: string }
       if (!res.ok) {
         addChatMessage({
           role: 'assistant',
@@ -242,6 +300,7 @@ export function AIAssistantPanel() {
         addChatMessage({
           role: 'assistant',
           content: data.reply ?? '(no response)',
+          proposal: data.proposal,
         })
       }
     } catch {
@@ -307,7 +366,12 @@ export function AIAssistantPanel() {
         ) : (
           <div className="space-y-2">
             {chatMessages.map((m) => (
-              <ChatBubble key={m.id} message={m} />
+              <ChatBubble
+                key={m.id}
+                message={m}
+                onAcceptProposal={handleAcceptProposal}
+                onRejectProposal={handleRejectProposal}
+              />
             ))}
             {isAiThinking && (
               <ChatBubble
@@ -364,13 +428,17 @@ export function AIAssistantPanel() {
 function ChatBubble({
   message,
   muted,
+  onAcceptProposal,
+  onRejectProposal,
 }: {
   message: ChatMessage
   muted?: boolean
+  onAcceptProposal?: (messageId: string, proposal: DesignProposal) => void
+  onRejectProposal?: (messageId: string, proposal: DesignProposal) => void
 }) {
   const isUser = message.role === 'user'
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div
         className={`max-w-[85%] px-3 py-2 rounded-lg text-sm leading-relaxed whitespace-pre-wrap ${
           isUser
@@ -382,6 +450,89 @@ function ChatBubble({
       >
         {message.content}
       </div>
+      {message.proposal && (
+        <ProposalCard
+          proposal={message.proposal}
+          onAccept={() => onAcceptProposal?.(message.id, message.proposal!)}
+          onReject={() => onRejectProposal?.(message.id, message.proposal!)}
+        />
+      )}
     </div>
+  )
+}
+
+/** Inline action card rendered under an assistant message that came
+ *  with a propose_design_change tool call. Accept dispatches the
+ *  changes into simulationParams (which rebuilds the geometry); reject
+ *  just marks the proposal dismissed so the buttons disable. */
+function ProposalCard({
+  proposal,
+  onAccept,
+  onReject,
+}: {
+  proposal: DesignProposal
+  onAccept: () => void
+  onReject: () => void
+}) {
+  const isResolved = proposal.status !== 'pending'
+  const statusBadge =
+    proposal.status === 'accepted' ? (
+      <span className="px-2 py-0.5 text-[10px] uppercase tracking-wide bg-green-500/20 text-green-300 rounded">
+        Applied
+      </span>
+    ) : proposal.status === 'rejected' ? (
+      <span className="px-2 py-0.5 text-[10px] uppercase tracking-wide bg-zinc-700 text-zinc-400 rounded">
+        Dismissed
+      </span>
+    ) : null
+
+  return (
+    <div className="mt-2 max-w-[85%] w-full border border-blue-500/40 bg-blue-500/5 rounded-lg overflow-hidden">
+      <div className="px-3 py-2 border-b border-blue-500/30 flex items-center justify-between gap-2">
+        <div className="text-sm font-medium text-blue-200">{proposal.title}</div>
+        {statusBadge}
+      </div>
+      <div className="px-3 py-2 space-y-2">
+        <div className="text-xs text-zinc-400 leading-relaxed">{proposal.rationale}</div>
+        <ul className="text-xs font-mono space-y-1">
+          {proposal.changes.map((c) => (
+            <ProposalChangeRow key={c.field} change={c} />
+          ))}
+        </ul>
+      </div>
+      {!isResolved && (
+        <div className="px-3 py-2 border-t border-blue-500/30 flex gap-2">
+          <button
+            type="button"
+            onClick={onReject}
+            className="flex-1 px-2 py-1.5 text-xs bg-red-600/10 hover:bg-red-600/20 text-red-300 rounded flex items-center justify-center gap-1"
+          >
+            <X className="size-3" />
+            Reject
+          </button>
+          <button
+            type="button"
+            onClick={onAccept}
+            className="flex-1 px-2 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center justify-center gap-1"
+          >
+            <Check className="size-3" />
+            Accept
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProposalChangeRow({ change }: { change: DesignChange }) {
+  const label = FIELD_LABELS[change.field]
+  const unit = FIELD_UNITS[change.field]
+  return (
+    <li className="flex items-center justify-between">
+      <span className="text-zinc-400">{label}</span>
+      <span className="text-blue-300">
+        {change.value} {unit}
+      </span>
+    </li>
   )
 }

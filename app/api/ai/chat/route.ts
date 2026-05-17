@@ -1,22 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { findLocalShops } from '@/lib/localShops'
+import type { DesignChange, DesignField, DesignProposal } from '@/lib/types'
 
 // Server-side route — process.env.OPENAI_API_KEY is never sent to the
 // browser. The frontend POSTs the conversation history here and gets
 // back the assistant's reply. If you want to swap models, change the
 // `model` string below; gpt-4o-mini is cheap and fast enough for demo.
 
-const SYSTEM_PROMPT = `You are MoldLocal's AI design assistant. MoldLocal is a design-aid tool that helps people iterate on plastic parts toward something that's actually moldable — without paying for expert DFM consulting.
+const SYSTEM_PROMPT_BASE = `You are MoldLocal's AI design assistant. MoldLocal is a design-aid tool that helps people iterate on plastic parts toward something that's actually moldable — without paying for expert DFM consulting.
 
 Your job is to help the designer understand and improve their part. Focus on injection-molding fundamentals: undercuts, draft angles, wall thickness, parting line, gate placement, cooling, ejection, tooling complexity, and how design choices affect cost and lead time. Be direct and conversational — no lecturing.
+
+When the designer asks how to improve the part, or describes a problem you can fix by adjusting one of the numeric design parameters (wall thickness, minimum draft angle, part length / width / height), call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Do not call it for problems you cannot fix with these parameters (sharp corners, material switching, gate placement). Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed.
+
+If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension, or "is this thick enough?" without naming a material grade), ask one focused follow-up question first instead of guessing.
 
 If the designer asks about local manufacturing options (e.g. "who can make this near me", "find a local shop", "where can I get this molded"), call the find_local_shops tool. Only call it on explicit request — don't push shops unprompted.
 
 Answer in 2-3 sentences of plain English unless the user asks for more detail.`
 
+interface PartContext {
+  material?: string
+  wallThickness?: number
+  minDraftAngle?: number
+  partLength?: number
+  partWidth?: number
+  partHeight?: number
+  numUndercuts?: number
+}
+
 interface ChatRequestBody {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** Optional snapshot of the current simulationParams so the model
+   *  can reference real values when proposing changes. */
+  context?: PartContext
 }
+
+function buildSystemPrompt(ctx: PartContext | undefined): string {
+  if (!ctx) return SYSTEM_PROMPT_BASE
+  const lines: string[] = []
+  if (ctx.material) lines.push(`material: ${ctx.material}`)
+  if (typeof ctx.wallThickness === 'number') lines.push(`wallThickness: ${ctx.wallThickness} mm`)
+  if (typeof ctx.minDraftAngle === 'number') lines.push(`minDraftAngle: ${ctx.minDraftAngle} deg`)
+  if (typeof ctx.partLength === 'number') lines.push(`partLength: ${ctx.partLength} mm`)
+  if (typeof ctx.partWidth === 'number') lines.push(`partWidth: ${ctx.partWidth} mm`)
+  if (typeof ctx.partHeight === 'number') lines.push(`partHeight: ${ctx.partHeight} mm`)
+  if (typeof ctx.numUndercuts === 'number') lines.push(`numUndercuts: ${ctx.numUndercuts}`)
+  if (lines.length === 0) return SYSTEM_PROMPT_BASE
+  return `${SYSTEM_PROMPT_BASE}\n\nCurrent part state:\n${lines.map((l) => `- ${l}`).join('\n')}`
+}
+
+const ALLOWED_FIELDS: DesignField[] = [
+  'wallThickness',
+  'minDraftAngle',
+  'partLength',
+  'partWidth',
+  'partHeight',
+]
 
 const TOOLS = [
   {
@@ -43,7 +83,88 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_design_change',
+      description:
+        'Propose a concrete change to the part\'s numeric parameters that the designer can Accept or Reject. The accepted change is applied to the 3D model and re-runs DFM. Use this when you want to suggest a specific, applicable fix (e.g. "increase wall thickness to 3 mm to fix the sink-mark risk"). Do not use it for things you cannot express as a parameter edit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Short label for the proposal (max ~8 words). Shown as the action-card heading.',
+          },
+          rationale: {
+            type: 'string',
+            description: 'One sentence explaining why this change helps. Shown under the title.',
+          },
+          changes: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 3,
+            items: {
+              type: 'object',
+              properties: {
+                field: {
+                  type: 'string',
+                  enum: ALLOWED_FIELDS,
+                  description: 'Which simulationParams field to set.',
+                },
+                value: {
+                  type: 'number',
+                  description: 'Target value. Units: mm for wallThickness / partLength / partWidth / partHeight, degrees for minDraftAngle.',
+                },
+              },
+              required: ['field', 'value'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['title', 'rationale', 'changes'],
+        additionalProperties: false,
+      },
+    },
+  },
 ]
+
+interface RawProposalArgs {
+  title?: unknown
+  rationale?: unknown
+  changes?: unknown
+}
+
+/** Validate a raw tool-call argument blob into a DesignProposal we can
+ *  hand to the client. Returns null if the shape is wrong rather than
+ *  throwing — a malformed proposal becomes a no-op the model can retry. */
+function parseProposal(raw: string, idHint: string): DesignProposal | null {
+  let parsed: RawProposalArgs
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (typeof parsed.title !== 'string' || typeof parsed.rationale !== 'string') return null
+  if (!Array.isArray(parsed.changes) || parsed.changes.length === 0) return null
+  const changes: DesignChange[] = []
+  for (const c of parsed.changes) {
+    if (typeof c !== 'object' || c === null) continue
+    const field = (c as { field?: unknown }).field
+    const value = (c as { value?: unknown }).value
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue
+    if (!ALLOWED_FIELDS.includes(field as DesignField)) continue
+    changes.push({ field: field as DesignField, value })
+  }
+  if (changes.length === 0) return null
+  return {
+    id: idHint,
+    title: parsed.title.slice(0, 120),
+    rationale: parsed.rationale.slice(0, 400),
+    changes,
+    status: 'pending',
+  }
+}
 
 async function callOpenAI(
   apiKey: string,
@@ -64,6 +185,57 @@ async function callOpenAI(
       temperature: 0.7,
     }),
   })
+}
+
+interface ToolCall {
+  id: string
+  function: { name: string; arguments: string }
+}
+
+/** If any of the model's tool calls is a propose_design_change, build
+ *  the final NextResponse here and return it. Returning null means "no
+ *  short-circuit; continue the tool-loop normally". */
+function maybeProposalResponse(toolCalls: ToolCall[], rawContent: string | null) {
+  const proposalCall = toolCalls.find((c) => c.function.name === 'propose_design_change')
+  if (!proposalCall) return null
+  const replyText = rawContent?.trim() ?? ''
+  const proposal = parseProposal(proposalCall.function.arguments || '{}', proposalCall.id)
+  if (proposal) {
+    return NextResponse.json({
+      reply: replyText || `Proposed: ${proposal.title}`,
+      proposal,
+    })
+  }
+  return NextResponse.json({
+    reply: replyText || '(proposal was malformed; please retry)',
+  })
+}
+
+/** Resolve a tool call to its tool-message reply that gets pushed back
+ *  into the conversation. find_local_shops is the only real tool here;
+ *  anything else returns an error so the model knows to back off. */
+function runShopTool(call: ToolCall) {
+  if (call.function.name !== 'find_local_shops') {
+    return {
+      role: 'tool',
+      tool_call_id: call.id,
+      name: call.function.name,
+      content: JSON.stringify({ error: 'unknown tool' }),
+    }
+  }
+  let args: { dfmScore?: number; zip?: string } = {}
+  try {
+    args = JSON.parse(call.function.arguments || '{}')
+  } catch {
+    /* leave args empty */
+  }
+  const shops = findLocalShops({ dfmScore: args.dfmScore, zip: args.zip, limit: 4 })
+  return {
+    role: 'tool',
+    tool_call_id: call.id,
+    name: 'find_local_shops',
+    content: JSON.stringify({ shops }),
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -99,7 +271,7 @@ export async function POST(req: NextRequest) {
     tool_call_id?: string
     name?: string
   }> = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: buildSystemPrompt(body.context) },
     ...body.messages,
   ]
 
@@ -130,32 +302,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ reply: (message.content as string)?.trim() ?? '(no response)' })
       }
 
+      // If the model proposed a design change, short-circuit the
+      // tool-loop and return the proposal alongside any text the model
+      // produced. The user's accept/reject is the next step.
+      const shortCircuit = maybeProposalResponse(toolCalls, message.content as string | null)
+      if (shortCircuit) return shortCircuit
+
       // Push the assistant's tool-call message before the tool outputs.
       conversation.push(message)
-
       for (const call of toolCalls) {
-        if (call.function.name !== 'find_local_shops') {
-          conversation.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            name: call.function.name,
-            content: JSON.stringify({ error: 'unknown tool' }),
-          })
-          continue
-        }
-        let args: { dfmScore?: number; zip?: string } = {}
-        try {
-          args = JSON.parse(call.function.arguments || '{}')
-        } catch {
-          /* leave args empty */
-        }
-        const shops = findLocalShops({ dfmScore: args.dfmScore, zip: args.zip, limit: 4 })
-        conversation.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          name: 'find_local_shops',
-          content: JSON.stringify({ shops }),
-        })
+        conversation.push(runShopTool(call))
       }
     }
 

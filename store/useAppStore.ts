@@ -150,6 +150,10 @@ interface AppState {
   chatMessages: ChatMessage[]
   isAiThinking: boolean
   addChatMessage: (msg: Omit<ChatMessage, 'id'> | ChatMessage) => void
+  /** Patch a specific chat message in place. Used by the AI proposal
+   *  flow to mark a proposal accepted / rejected without re-appending
+   *  the whole message. */
+  updateChatMessage: (id: string, patch: Partial<ChatMessage>) => void
   setAiThinking: (thinking: boolean) => void
   clearChat: () => void
 
@@ -350,6 +354,10 @@ export const useAppStore = create<AppState>((set) => ({
         ...s.chatMessages,
         'id' in msg && msg.id ? msg : { ...msg, id: nextChatId() },
       ],
+    })),
+  updateChatMessage: (id, patch) =>
+    set((s) => ({
+      chatMessages: s.chatMessages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     })),
   setAiThinking: (thinking) => set({ isAiThinking: thinking }),
   clearChat: () => set({ chatMessages: [], isAiThinking: false }),
