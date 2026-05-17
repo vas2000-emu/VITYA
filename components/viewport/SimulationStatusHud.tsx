@@ -49,7 +49,14 @@ export function SimulationStatusHud() {
         : CheckCircle2
 
   return (
-    <div className="absolute bottom-4 left-4 z-10 flex items-stretch gap-2">
+    <div className="absolute bottom-4 right-4 z-10 flex items-stretch gap-2">
+      <div className="flex items-center gap-3 px-3 py-2 text-[11px] rounded-lg border border-zinc-800 bg-zinc-900/85 backdrop-blur text-zinc-300">
+        <StatBit label="Wall" value={`${(sp.wallThickness / 25.4).toFixed(3)} in`} />
+        <StatBit label="Draft" value={`${sp.minDraftAngle.toFixed(1)}°`} />
+        <StatBit label="Material" value={sp.material} />
+        <StatBit label="Cavities" value={`${sp.numCavities}`} />
+      </div>
+
       <div className={`flex items-center gap-2 px-3 py-2 text-xs rounded-lg border backdrop-blur ${tone}`}>
         <IconEl className="size-4" />
         <div>
@@ -58,13 +65,6 @@ export function SimulationStatusHud() {
             Moldability · {issueCount} issue{issueCount === 1 ? '' : 's'}
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center gap-3 px-3 py-2 text-[11px] rounded-lg border border-zinc-800 bg-zinc-900/85 backdrop-blur text-zinc-300">
-        <StatBit label="Wall" value={`${(sp.wallThickness / 25.4).toFixed(3)} in`} />
-        <StatBit label="Draft" value={`${sp.minDraftAngle.toFixed(1)}°`} />
-        <StatBit label="Material" value={sp.material} />
-        <StatBit label="Cavities" value={`${sp.numCavities}`} />
       </div>
     </div>
   )
