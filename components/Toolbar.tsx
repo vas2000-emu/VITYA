@@ -345,7 +345,7 @@ function RibbonGroup({
 }) {
   return (
     <div
-      className={`flex items-center gap-0.5 px-2 ${
+      className={`flex items-stretch gap-0.5 px-2 ${
         bordered ? 'border-r border-zinc-800' : ''
       }`}
     >
@@ -353,6 +353,15 @@ function RibbonGroup({
     </div>
   )
 }
+
+// Ribbon entries are full-height cards inside the 88-px ribbon row.
+// Icon goes flush with the top padding, label goes flush with the
+// bottom padding, and the middle flex-1 spacer eats whatever vertical
+// room is left so single-line labels and three-line labels still
+// share the same top / bottom baselines across the row.
+const RIBBON_CARD =
+  'flex h-full w-[78px] flex-col items-center rounded px-1 py-2 transition-colors'
+const RIBBON_LABEL = 'text-[11px] leading-tight text-center break-words'
 
 function RibbonLink({
   href,
@@ -364,15 +373,10 @@ function RibbonLink({
   label: string
 }) {
   return (
-    <Link
-      href={href}
-      className="flex flex-col items-center justify-between w-[78px] px-1 py-2 rounded hover:bg-zinc-800 text-zinc-300 transition-colors"
-      title={label}
-    >
-      <Icon className="size-6 text-zinc-300 shrink-0" />
-      <span className="text-[11px] leading-tight text-zinc-400 text-center break-words">
-        {label}
-      </span>
+    <Link href={href} className={`${RIBBON_CARD} text-zinc-300 hover:bg-zinc-800`} title={label}>
+      <Icon className="size-6 text-zinc-300" />
+      <span className="flex-1" aria-hidden />
+      <span className={`${RIBBON_LABEL} text-zinc-400`}>{label}</span>
     </Link>
   )
 }
@@ -391,17 +395,14 @@ function RibbonButton({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-between w-[78px] px-1 py-2 rounded transition-colors ${
-        active
-          ? 'bg-blue-600/80 hover:bg-blue-600 text-white'
-          : 'hover:bg-zinc-800 text-zinc-300'
+      className={`${RIBBON_CARD} ${
+        active ? 'bg-blue-600/80 hover:bg-blue-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'
       }`}
       title={label}
     >
-      <Icon className="size-6 shrink-0" />
-      <span className="text-[11px] leading-tight text-center break-words">
-        {label}
-      </span>
+      <Icon className="size-6" />
+      <span className="flex-1" aria-hidden />
+      <span className={RIBBON_LABEL}>{label}</span>
     </button>
   )
 }
