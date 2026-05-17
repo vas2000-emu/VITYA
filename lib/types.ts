@@ -36,22 +36,16 @@ export type RightPanelType = 'ai' | 'manufacturing'
 
 // Chat
 
-/** Fields the AI assistant is allowed to modify on the part. Kept to a
- *  small numeric subset so a tool call can be applied with one
- *  `updateSimulationParams` dispatch and immediately re-rebuild the
- *  procedural geometry. */
-export type DesignField =
-  | 'wallThickness'
-  | 'minDraftAngle'
-  | 'partLength'
-  | 'partWidth'
-  | 'partHeight'
+/** Fields the AI assistant is allowed to modify on the part.
+ *  Intentionally limited to manufacturing-side parameters (wall, draft)
+ *  — part length / width / height are the customer's spec and stay
+ *  under direct user control via the Parameters panel only. */
+export type DesignField = 'wallThickness' | 'minDraftAngle'
 
 export interface DesignChange {
   field: DesignField
   /** Target value. Units are implied by the field: mm for
-   *  wallThickness / partLength / partWidth / partHeight, degrees for
-   *  minDraftAngle. */
+   *  wallThickness, degrees for minDraftAngle. */
   value: number
 }
 

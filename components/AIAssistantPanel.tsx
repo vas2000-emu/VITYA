@@ -13,6 +13,7 @@ import {
   PanelRight,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import type {
   AISuggestion,
   ChatMessage,
@@ -21,24 +22,30 @@ import type {
   DesignProposal,
   Operation,
   OperationType,
+  PartId,
 } from '@/lib/types'
 
 /** Human-readable labels for the parameter fields the AI can propose
- *  changes to. Keep these in sync with DesignField in lib/types.ts. */
+ *  changes to. Keep these in sync with DesignField in lib/types.ts.
+ *  Part length / width / height are intentionally excluded so the AI
+ *  can only propose manufacturing-side changes. */
 const FIELD_LABELS: Record<DesignField, string> = {
   wallThickness: 'Wall thickness',
   minDraftAngle: 'Min draft angle',
-  partLength: 'Length',
-  partWidth: 'Width',
-  partHeight: 'Height',
 }
 
 const FIELD_UNITS: Record<DesignField, string> = {
   wallThickness: 'mm',
   minDraftAngle: 'deg',
-  partLength: 'mm',
-  partWidth: 'mm',
-  partHeight: 'mm',
+}
+
+/** Inverse of ParameterPanel's paramToSimulationKey. simulationParams is
+ *  the source of truth for the 3D geometry / DFM scoring, but the
+ *  left-hand Parameters panel reads from the separate `parameters[]`
+ *  array, so an accepted proposal has to write to both. */
+const FIELD_TO_PARAM_ID: Record<DesignField, string> = {
+  wallThickness: 'p-wall',
+  minDraftAngle: 'p-draft',
 }
 
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
@@ -234,17 +241,32 @@ export function AIAssistantPanel() {
     setAiThinking,
     simulationParams,
     updateSimulationParams,
+    updateParameterValue,
+    currentPartId,
+    uploadedSTL,
   } = useAppStore()
 
-  /** Apply a proposal's changes to simulationParams. The Parameters
-   *  panel + 3D viewport + live DFM all watch simulationParams, so a
-   *  single dispatch fans out to every dependent surface. Mutating the
-   *  proposal's status in-place on the chat message disables the
-   *  Accept/Reject buttons in the bubble. */
+  // Friendly part identity for the AI context. partsLibrary has hero
+  // names + a one-line summary for each of the 4 demo parts; uploaded
+  // STLs aren't in the library so we fall back to a generic label.
+  const partEntry = partsLibrary[currentPartId as PartId]
+  const partName = uploadedSTL
+    ? 'User-uploaded STL'
+    : partEntry?.partName ?? currentPartId
+  const partSummary = uploadedSTL ? undefined : partEntry?.partSummary
+
+  /** Apply a proposal's changes. simulationParams drives the 3D
+   *  geometry, the live DFM score, and the analysis pages — one
+   *  updateSimulationParams call fans out to all of those. But the
+   *  left-hand Parameters panel reads from the separate `parameters[]`
+   *  array, so we also have to call updateParameterValue per change so
+   *  the panel's displayed number matches what was actually applied
+   *  downstream. */
   const handleAcceptProposal = (messageId: string, proposal: DesignProposal) => {
     const patch: Record<string, number> = {}
     for (const change of proposal.changes) {
       patch[change.field] = change.value
+      updateParameterValue(FIELD_TO_PARAM_ID[change.field], change.value)
     }
     updateSimulationParams(patch)
     updateChatMessage(messageId, {
@@ -277,9 +299,13 @@ export function AIAssistantPanel() {
             userMsg,
           ],
           // Snapshot the part state so the model can quote real numbers
-          // (e.g. "your wall is 3 mm; drop to 2.5 mm to..."). Only fields
-          // the propose tool can edit + material for context.
+          // (e.g. "your bumper's wall is 3 mm; drop to 2.5 mm to...").
+          // partName + partSummary give the model identity so it can
+          // refer to the part by name instead of "the part".
           context: {
+            partId: currentPartId,
+            partName,
+            partSummary,
             material: simulationParams.material,
             wallThickness: simulationParams.wallThickness,
             minDraftAngle: simulationParams.minDraftAngle,

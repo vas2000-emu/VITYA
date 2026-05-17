@@ -11,7 +11,7 @@ const SYSTEM_PROMPT_BASE = `You are MoldLocal's AI design assistant. MoldLocal i
 
 Your job is to help the designer understand and improve their part. Focus on injection-molding fundamentals: undercuts, draft angles, wall thickness, parting line, gate placement, cooling, ejection, tooling complexity, and how design choices affect cost and lead time. Be direct and conversational — no lecturing.
 
-When the designer asks how to improve the part, or describes a problem you can fix by adjusting one of the numeric design parameters (wall thickness, minimum draft angle, part length / width / height), call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Do not call it for problems you cannot fix with these parameters (sharp corners, material switching, gate placement). Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed.
+When the designer asks how to improve the part, or describes a problem you can fix by adjusting wall thickness or the minimum draft angle, call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Do NOT use it to change part length / width / height — those are the customer's spec and stay under direct user control. Do not call it for problems you cannot fix with wall or draft (sharp corners, material switching, gate placement, dimensions). Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed.
 
 If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension, or "is this thick enough?" without naming a material grade), ask one focused follow-up question first instead of guessing.
 
@@ -20,6 +20,9 @@ If the designer asks about local manufacturing options (e.g. "who can make this 
 Answer in 2-3 sentences of plain English unless the user asks for more detail.`
 
 interface PartContext {
+  partId?: string
+  partName?: string
+  partSummary?: string
   material?: string
   wallThickness?: number
   minDraftAngle?: number
@@ -38,25 +41,33 @@ interface ChatRequestBody {
 
 function buildSystemPrompt(ctx: PartContext | undefined): string {
   if (!ctx) return SYSTEM_PROMPT_BASE
-  const lines: string[] = []
-  if (ctx.material) lines.push(`material: ${ctx.material}`)
-  if (typeof ctx.wallThickness === 'number') lines.push(`wallThickness: ${ctx.wallThickness} mm`)
-  if (typeof ctx.minDraftAngle === 'number') lines.push(`minDraftAngle: ${ctx.minDraftAngle} deg`)
-  if (typeof ctx.partLength === 'number') lines.push(`partLength: ${ctx.partLength} mm`)
-  if (typeof ctx.partWidth === 'number') lines.push(`partWidth: ${ctx.partWidth} mm`)
-  if (typeof ctx.partHeight === 'number') lines.push(`partHeight: ${ctx.partHeight} mm`)
-  if (typeof ctx.numUndercuts === 'number') lines.push(`numUndercuts: ${ctx.numUndercuts}`)
-  if (lines.length === 0) return SYSTEM_PROMPT_BASE
-  return `${SYSTEM_PROMPT_BASE}\n\nCurrent part state:\n${lines.map((l) => `- ${l}`).join('\n')}`
+
+  const identity: string[] = []
+  if (ctx.partName) identity.push(`The designer is currently working on: ${ctx.partName}.`)
+  if (ctx.partSummary) identity.push(ctx.partSummary)
+  identity.push('Refer to this part by name when relevant instead of "the part".')
+
+  const params: string[] = []
+  if (ctx.material) params.push(`material: ${ctx.material}`)
+  if (typeof ctx.wallThickness === 'number') params.push(`wallThickness: ${ctx.wallThickness} mm`)
+  if (typeof ctx.minDraftAngle === 'number') params.push(`minDraftAngle: ${ctx.minDraftAngle} deg`)
+  if (typeof ctx.partLength === 'number') params.push(`partLength: ${ctx.partLength} mm`)
+  if (typeof ctx.partWidth === 'number') params.push(`partWidth: ${ctx.partWidth} mm`)
+  if (typeof ctx.partHeight === 'number') params.push(`partHeight: ${ctx.partHeight} mm`)
+  if (typeof ctx.numUndercuts === 'number') params.push(`numUndercuts: ${ctx.numUndercuts}`)
+
+  if (identity.length === 0 && params.length === 0) return SYSTEM_PROMPT_BASE
+
+  const sections: string[] = [SYSTEM_PROMPT_BASE]
+  if (identity.length > 0) sections.push(`Current part:\n${identity.join(' ')}`)
+  if (params.length > 0) {
+    const bullets = params.map((l) => '- ' + l).join('\n')
+    sections.push(`Current parameter values:\n${bullets}`)
+  }
+  return sections.join('\n\n')
 }
 
-const ALLOWED_FIELDS: DesignField[] = [
-  'wallThickness',
-  'minDraftAngle',
-  'partLength',
-  'partWidth',
-  'partHeight',
-]
+const ALLOWED_FIELDS: DesignField[] = ['wallThickness', 'minDraftAngle']
 
 const TOOLS = [
   {
@@ -88,7 +99,7 @@ const TOOLS = [
     function: {
       name: 'propose_design_change',
       description:
-        'Propose a concrete change to the part\'s numeric parameters that the designer can Accept or Reject. The accepted change is applied to the 3D model and re-runs DFM. Use this when you want to suggest a specific, applicable fix (e.g. "increase wall thickness to 3 mm to fix the sink-mark risk"). Do not use it for things you cannot express as a parameter edit.',
+        'Propose a concrete change to the part\'s manufacturing parameters (wall thickness and / or minimum draft angle) that the designer can Accept or Reject. The accepted change is applied to the 3D model and re-runs DFM. Do NOT propose changes to part length, width, or height — those are the customer\'s spec.',
       parameters: {
         type: 'object',
         properties: {
@@ -114,7 +125,7 @@ const TOOLS = [
                 },
                 value: {
                   type: 'number',
-                  description: 'Target value. Units: mm for wallThickness / partLength / partWidth / partHeight, degrees for minDraftAngle.',
+                  description: 'Target value. Units: mm for wallThickness, degrees for minDraftAngle.',
                 },
               },
               required: ['field', 'value'],
