@@ -145,7 +145,7 @@ const phoneCase: MoldAnalysisResult = {
       scoreImpact: '+10',
       beforeScore: 71,
       afterScore: 81,
-      hotspot: { top: '52%', left: '32%', label: 'Sink risk' },
+      hotspot: { top: '50%', left: '60%', label: 'Sink risk' },
     },
     {
       id: 'corner-1',
@@ -159,7 +159,7 @@ const phoneCase: MoldAnalysisResult = {
       scoreImpact: '+8',
       beforeScore: 71,
       afterScore: 79,
-      hotspot: { top: '20%', left: '20%', label: 'Sharp corner' },
+      hotspot: { top: '18%', left: '42%', label: 'Sharp corner' },
     },
   ],
   supplierReadiness: {

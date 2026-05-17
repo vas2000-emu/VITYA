@@ -1,6 +1,7 @@
 'use client'
 
 import { useResultsStore } from '@/store/useResultsStore'
+import { useAppStore } from '@/store/useAppStore'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
 import { PartSilhouette } from './PartSilhouette'
 
@@ -54,6 +55,11 @@ function Hotspot({ issue }: { issue: MoldIssue }) {
 
 export function PartPreview() {
   const { analysis } = useResultsStore()
+  // For AI-generated parts the partId is a `user-...` slug; look up the
+  // matching UserPart so the silhouette can render the actual primitive
+  // (torus, hex prism, etc.) instead of a generic rectangle.
+  const userPart = useAppStore((s) => s.userParts.find((p) => p.id === analysis.partId))
+  const customSpec = userPart?.kind === 'ai-created' ? userPart.spec : null
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
@@ -78,7 +84,7 @@ export function PartPreview() {
       </div>
 
       <div className="relative aspect-[4/3] bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
-        <PartSilhouette partId={analysis.partId} />
+        <PartSilhouette partId={analysis.partId} customSpec={customSpec} />
         {analysis.issues.map((issue) => (
           <Hotspot key={issue.id} issue={issue} />
         ))}

@@ -1,6 +1,6 @@
 'use client'
 
-import type { PartId } from '@/lib/types'
+import type { CustomPartSpec, PartId } from '@/lib/types'
 
 /**
  * Lightweight per-part SVG silhouettes for the dashboard PartPreview.
@@ -10,8 +10,18 @@ import type { PartId } from '@/lib/types'
  * and the workspace's 3D viewport tell the same story. Hotspot
  * percentages in lib/mockMoldAnalysis.ts are tuned to land on the
  * corresponding feature in each silhouette.
+ *
+ * For AI-generated parts (no demo id match), the silhouette is picked
+ * from the CustomPartSpec.shape so a donut renders as a donut, a hex
+ * prism as a hexagon, etc.
  */
-export function PartSilhouette({ partId }: { partId: PartId }) {
+export function PartSilhouette({
+  partId,
+  customSpec,
+}: {
+  partId: PartId
+  customSpec?: CustomPartSpec | null
+}) {
   switch (partId) {
     case 'bracket':
       return <BracketSilhouette />
@@ -22,14 +32,35 @@ export function PartSilhouette({ partId }: { partId: PartId }) {
     case 'bumper':
       return <BumperSilhouette />
     default:
-      // AI-generated / uploaded parts don't have a hand-drawn
-      // silhouette. Show a neutral placeholder so the hotspots still
-      // have a backdrop instead of an empty pane.
-      return <CustomPartSilhouette />
+      return <CustomPartSilhouette spec={customSpec ?? null} />
   }
 }
 
-function CustomPartSilhouette() {
+function CustomPartSilhouette({ spec }: { spec: CustomPartSpec | null }) {
+  const label = spec?.label ?? 'Custom part'
+  switch (spec?.shape) {
+    case 'torus':
+    case 'ring':
+      return <TorusSilhouette label={label} />
+    case 'cylinder':
+    case 'dome':
+      return <CylinderSilhouette label={label} isDome={spec.shape === 'dome'} />
+    case 'sphere':
+      return <SphereSilhouette label={label} />
+    case 'cone':
+      return <ConeSilhouette label={label} />
+    case 'hex_prism':
+      return <HexPrismSilhouette label={label} />
+    case 'box':
+    case 'plate':
+    case 'shell':
+      return <BoxSilhouette label={label} spec={spec} />
+    default:
+      return <GenericRectSilhouette label={label} />
+  }
+}
+
+function SvgFrame({ children }: { children: React.ReactNode }) {
   return (
     <svg
       viewBox="0 0 400 300"
@@ -38,6 +69,148 @@ function CustomPartSilhouette() {
     >
       <Defs />
       <GridFloor />
+      {children}
+    </svg>
+  )
+}
+
+function TorusSilhouette({ label }: { label: string }) {
+  // Donut viewed from above: outer disc + concentric hole.
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy="258" rx="100" ry="6" fill="#000" opacity="0.25" />
+      <circle cx="200" cy="150" r="100" fill="url(#partFill)" stroke="url(#partEdge)" strokeWidth="1.5" />
+      <circle cx="200" cy="150" r="40" fill="#09090b" stroke="#52525b" strokeWidth="0.8" />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function CylinderSilhouette({ label, isDome }: { label: string; isDome: boolean }) {
+  // Cylinder viewed from front: top ellipse + side rectangle + bottom ellipse.
+  // Dome variant rounds the top.
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy="258" rx="80" ry="6" fill="#000" opacity="0.25" />
+      {isDome ? (
+        <path
+          d="M 120 220 L 120 150 A 80 80 0 0 1 280 150 L 280 220 Z"
+          fill="url(#partFill)"
+          stroke="url(#partEdge)"
+          strokeWidth="1.5"
+        />
+      ) : (
+        <>
+          <rect x="120" y="80" width="160" height="140" fill="url(#partFill)" />
+          <ellipse cx="200" cy="80" rx="80" ry="14" fill="url(#partEdge)" stroke="#71717a" strokeWidth="1" />
+          <line x1="120" y1="80" x2="120" y2="220" stroke="url(#partEdge)" strokeWidth="1.5" />
+          <line x1="280" y1="80" x2="280" y2="220" stroke="url(#partEdge)" strokeWidth="1.5" />
+        </>
+      )}
+      <ellipse cx="200" cy="220" rx="80" ry="14" fill="#18181b" stroke="#71717a" strokeWidth="1" />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function SphereSilhouette({ label }: { label: string }) {
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy="258" rx="80" ry="6" fill="#000" opacity="0.3" />
+      <circle cx="200" cy="150" r="90" fill="url(#partFill)" stroke="url(#partEdge)" strokeWidth="1.5" />
+      <ellipse cx="172" cy="118" rx="22" ry="12" fill="#a1a1aa" opacity="0.25" />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function ConeSilhouette({ label }: { label: string }) {
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy="258" rx="90" ry="6" fill="#000" opacity="0.25" />
+      <path
+        d="M 200 60 L 290 230 L 110 230 Z"
+        fill="url(#partFill)"
+        stroke="url(#partEdge)"
+        strokeWidth="1.5"
+      />
+      <ellipse cx="200" cy="230" rx="90" ry="14" fill="#18181b" stroke="#71717a" strokeWidth="1" />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function HexPrismSilhouette({ label }: { label: string }) {
+  // Hex viewed from above (flat-top).
+  const cx = 200
+  const cy = 150
+  const r = 90
+  const pts: string[] = []
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i + Math.PI / 6
+    pts.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`)
+  }
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy="258" rx="90" ry="6" fill="#000" opacity="0.25" />
+      <polygon
+        points={pts.join(' ')}
+        fill="url(#partFill)"
+        stroke="url(#partEdge)"
+        strokeWidth="1.5"
+      />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function BoxSilhouette({ label, spec }: { label: string; spec: CustomPartSpec }) {
+  // Aspect-ratio-aware rectangle so a 5x5 plate reads as square and a
+  // long thin plate reads as long. partLength / partWidth are mm.
+  const aspect = spec.partLength / Math.max(1, spec.partWidth)
+  const maxW = 240
+  const maxH = 200
+  let w = maxW
+  let h = maxW / aspect
+  if (h > maxH) {
+    h = maxH
+    w = maxH * aspect
+  }
+  const x = 200 - w / 2
+  const y = 150 - h / 2
+  return (
+    <SvgFrame>
+      <ellipse cx="200" cy={y + h + 12} rx={w / 2 + 10} ry="6" fill="#000" opacity="0.25" />
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx="10"
+        fill="url(#partFill)"
+        stroke="url(#partEdge)"
+        strokeWidth="1.5"
+      />
+      <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
+        <text x="200" y="278" textAnchor="middle">{label}</text>
+      </g>
+    </SvgFrame>
+  )
+}
+
+function GenericRectSilhouette({ label }: { label: string }) {
+  return (
+    <SvgFrame>
       <ellipse cx="200" cy="252" rx="160" ry="6" fill="#000" opacity="0.25" />
       <rect
         x="80"
@@ -50,9 +223,9 @@ function CustomPartSilhouette() {
         strokeWidth="1.5"
       />
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
-        <text x="200" y="170" textAnchor="middle">Custom part</text>
+        <text x="200" y="278" textAnchor="middle">{label}</text>
       </g>
-    </svg>
+    </SvgFrame>
   )
 }
 
