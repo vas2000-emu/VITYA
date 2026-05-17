@@ -75,12 +75,52 @@ function SvgFrame({ children }: { children: React.ReactNode }) {
 }
 
 function TorusSilhouette({ label }: { label: string }) {
-  // Donut viewed from above: outer disc + concentric hole.
+  // Donut viewed at a slight 3/4 tilt so it reads as 3D instead of
+  // two flat circles. Outer ring is an ellipse (squashed vertically),
+  // the hole is a smaller offset ellipse, and a radial highlight
+  // gives the tube some volume.
   return (
     <SvgFrame>
-      <ellipse cx="200" cy="258" rx="100" ry="6" fill="#000" opacity="0.25" />
-      <circle cx="200" cy="150" r="100" fill="url(#partFill)" stroke="url(#partEdge)" strokeWidth="1.5" />
-      <circle cx="200" cy="150" r="40" fill="#09090b" stroke="#52525b" strokeWidth="0.8" />
+      <ellipse cx="200" cy="262" rx="118" ry="7" fill="#000" opacity="0.30" />
+      {/* Outer tube */}
+      <ellipse
+        cx="200"
+        cy="152"
+        rx="118"
+        ry="86"
+        fill="url(#partFill)"
+        stroke="url(#partEdge)"
+        strokeWidth="1.5"
+      />
+      {/* Highlight wash over the upper-left of the tube */}
+      <ellipse cx="200" cy="152" rx="118" ry="86" fill="url(#bodyHighlight)" />
+      {/* Top-left specular sliver */}
+      <path
+        d="M 105 110 A 118 86 0 0 1 245 78"
+        fill="none"
+        stroke="url(#rimHighlight)"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      {/* Inner hole — pushed slightly upward to imply the inside wall
+          on the far side of the tilted ring catches a bit of light. */}
+      <ellipse
+        cx="200"
+        cy="148"
+        rx="46"
+        ry="28"
+        fill="url(#cavityShadow)"
+        stroke="#3f3f46"
+        strokeWidth="0.8"
+      />
+      {/* Subtle bottom-rim of the hole to read as depth */}
+      <path
+        d="M 156 152 A 46 28 0 0 0 244 152"
+        fill="none"
+        stroke="#52525b"
+        strokeWidth="0.8"
+        opacity="0.7"
+      />
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
         <text x="200" y="278" textAnchor="middle">{label}</text>
       </g>
@@ -122,7 +162,14 @@ function SphereSilhouette({ label }: { label: string }) {
     <SvgFrame>
       <ellipse cx="200" cy="258" rx="80" ry="6" fill="#000" opacity="0.3" />
       <circle cx="200" cy="150" r="90" fill="url(#partFill)" stroke="url(#partEdge)" strokeWidth="1.5" />
-      <ellipse cx="172" cy="118" rx="22" ry="12" fill="#a1a1aa" opacity="0.25" />
+      <circle cx="200" cy="150" r="90" fill="url(#bodyHighlight)" />
+      <path
+        d="M 130 110 A 90 90 0 0 1 250 80"
+        fill="none"
+        stroke="url(#rimHighlight)"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
         <text x="200" y="278" textAnchor="middle">{label}</text>
       </g>
@@ -167,6 +214,7 @@ function HexPrismSilhouette({ label }: { label: string }) {
         stroke="url(#partEdge)"
         strokeWidth="1.5"
       />
+      <polygon points={pts.join(' ')} fill="url(#bodyHighlight)" />
       <g fill="#52525b" fontSize="9" fontFamily="ui-monospace, monospace">
         <text x="200" y="278" textAnchor="middle">{label}</text>
       </g>
@@ -252,6 +300,29 @@ function Defs() {
       <linearGradient id="partEdge" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#71717a" />
         <stop offset="100%" stopColor="#3f3f46" />
+      </linearGradient>
+      {/* Radial highlight skewed toward the top-left — gives round
+          shapes (torus, sphere, hex prism) a sense of being lit from
+          above so they don't read as flat silhouettes. */}
+      <radialGradient id="bodyHighlight" cx="0.32" cy="0.30" r="0.85">
+        <stop offset="0%" stopColor="#a1a1aa" stopOpacity="0.55" />
+        <stop offset="35%" stopColor="#52525b" stopOpacity="0.20" />
+        <stop offset="100%" stopColor="#09090b" stopOpacity="0" />
+      </radialGradient>
+      {/* Soft dark gradient used for the hole on torus / ring shapes
+          and recessed cavities — fades the cutout into the background
+          instead of a hard black disc. */}
+      <radialGradient id="cavityShadow" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0%" stopColor="#000" stopOpacity="0.85" />
+        <stop offset="70%" stopColor="#09090b" stopOpacity="0.95" />
+        <stop offset="100%" stopColor="#27272a" stopOpacity="0.9" />
+      </radialGradient>
+      {/* Thin specular sliver across the upper-left rim of round
+          parts. Drawn as a clipped ellipse stroke. */}
+      <linearGradient id="rimHighlight" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#e4e4e7" stopOpacity="0.6" />
+        <stop offset="50%" stopColor="#e4e4e7" stopOpacity="0.1" />
+        <stop offset="100%" stopColor="#e4e4e7" stopOpacity="0" />
       </linearGradient>
     </defs>
   )

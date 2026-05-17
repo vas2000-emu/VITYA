@@ -4,7 +4,8 @@ import { moldAnalysisData, getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
 import { getPartSimInputs } from '@/lib/partSimInputs'
 import { runFullAnalysis, type FullAnalysisResponse } from '@/lib/moldsim-api'
 import { useAppStore } from '@/store/useAppStore'
-import type { MoldAnalysisResult, PartId, UserPart } from '@/lib/types'
+import type { CustomPartShape, MoldAnalysisResult, MoldIssue, MoldIssueSeverity, PartId, UserPart } from '@/lib/types'
+import type { ManufacturingIssue } from '@/lib/moldsim/types'
 
 /**
  * Loading phases shown by LoadingScreen. Each phase has a label and a
@@ -70,6 +71,73 @@ interface ResultsState {
 // when a newer simulate is kicked off (e.g. user clicks Re-analyze twice fast,
 // or switches parts mid-load).
 let simulateToken = 0
+
+/** Map a moldsim severity bucket into the dashboard's MoldIssueSeverity. */
+function mapSeverity(s: ManufacturingIssue['severity']): MoldIssueSeverity {
+  if (s === 'critical') return 'high'
+  if (s === 'warning') return 'medium'
+  return 'low'
+}
+
+/** Pick a set of hotspot (top%, left%) positions tuned to where the
+ *  body of the silhouette sits on screen. Round shapes get a ring of
+ *  positions around the body; box-like shapes get corner / edge spots
+ *  on the rectangle. Used to place issue markers on AI-part previews. */
+function hotspotPositionsFor(shape: CustomPartShape | undefined, count: number): Array<{ top: string; left: string }> {
+  const roundRing: Array<{ top: string; left: string }> = [
+    { top: '28%', left: '72%' }, // top-right
+    { top: '72%', left: '28%' }, // bottom-left
+    { top: '50%', left: '78%' }, // right
+    { top: '50%', left: '22%' }, // left
+    { top: '24%', left: '38%' }, // top-left
+    { top: '76%', left: '62%' }, // bottom-right
+  ]
+  const boxCorners: Array<{ top: string; left: string }> = [
+    { top: '28%', left: '70%' },
+    { top: '70%', left: '30%' },
+    { top: '28%', left: '30%' },
+    { top: '70%', left: '70%' },
+    { top: '50%', left: '78%' },
+    { top: '50%', left: '22%' },
+  ]
+  const ring = shape === 'box' || shape === 'plate' || shape === 'shell' ? boxCorners : roundRing
+  return ring.slice(0, Math.max(0, Math.min(count, ring.length)))
+}
+
+/** Convert moldsim API issues into the dashboard's MoldIssue shape so
+ *  the part preview can render hotspots for AI-generated parts.
+ *  Hotspot positions are synthesized from the part's primitive shape
+ *  since the API issues are non-spatial (severity + category +
+ *  recommendation only). Info-level issues are dropped — they're
+ *  positive notes, not problems to flag on the preview. */
+function synthesizeMoldIssues(
+  apiIssues: ManufacturingIssue[],
+  shape: CustomPartShape | undefined,
+  currentScore: number,
+): MoldIssue[] {
+  const flagged = apiIssues.filter((i) => i.severity !== 'info')
+  const positions = hotspotPositionsFor(shape, flagged.length)
+  return flagged.map((issue, idx) => {
+    const severity = mapSeverity(issue.severity)
+    const gain = severity === 'high' ? 15 : severity === 'medium' ? 10 : 5
+    const pos = positions[idx] ?? { top: '50%', left: '50%' }
+    const labelShort = issue.issue.slice(0, 40)
+    return {
+      id: `ai-${idx}`,
+      title: issue.issue.slice(0, 80),
+      severity,
+      location: issue.category,
+      whyItMatters: issue.issue,
+      costImpact: issue.estimated_cost_impact ?? 'Lowers moldability score and increases scrap risk.',
+      leadTimeImpact: 'Adds sampling iterations to dial the part in.',
+      recommendation: issue.recommendation,
+      scoreImpact: `+${gain}`,
+      beforeScore: currentScore,
+      afterScore: Math.min(100, currentScore + gain),
+      hotspot: { top: pos.top, left: pos.left, label: labelShort },
+    }
+  })
+}
 
 /** Shared user-part analysis path used by both selectUserPart() (when
  *  the user switches to an AI/STL part) and runMoldsim() (when the
@@ -173,6 +241,13 @@ async function runUserPartAnalysis(
       tooling > 25_000 || perPart > 2 ? 'High' : tooling > 15_000 ? 'Medium' : 'Low'
     const leadTimeLabel = cycleTime > 45 ? 'Long' : cycleTime > 30 ? 'Moderate' : 'Short'
 
+    const shape = part.kind === 'ai-created' ? part.spec.shape : undefined
+    const synthIssues = synthesizeMoldIssues(results.manufacturing.issues, shape, dfmScore)
+    const improvedScore = Math.min(
+      100,
+      dfmScore + synthIssues.reduce((sum, i) => sum + (Number(i.scoreImpact.replace('+', '')) || 0), 0),
+    )
+
     const syntheticAnalysis: MoldAnalysisResult = {
       partId: part.id as PartId,
       partName: part.label,
@@ -181,8 +256,8 @@ async function runUserPartAnalysis(
           ? `AI-generated ${part.spec.shape} part.`
           : 'User-uploaded STL part.',
       overallScore: dfmScore,
-      improvedScore: dfmScore,
-      issues: [],
+      improvedScore,
+      issues: synthIssues,
       riskSummary: [
         {
           label: 'Moldability',
@@ -236,7 +311,7 @@ async function runUserPartAnalysis(
       liveResults: results,
       liveError: null,
       analysis: syntheticAnalysis,
-      selectedIssueId: null,
+      selectedIssueId: synthIssues[0]?.id ?? null,
       fixedIssueIds: [],
       pendingFixId: null,
       showFix: false,
