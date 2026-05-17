@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/useAppStore'
-import { partSimInputs } from '@/lib/partSimInputs'
+import { getPartSimInputs } from '@/lib/partSimInputs'
 import type { PartId } from '@/lib/types'
 import { DEFAULT_GEOMETRY_PARAMS, type GeometryParams } from './partGeometry'
 
@@ -33,8 +33,20 @@ export function useDebouncedGeometryParams(delayMs = 200): GeometryParams {
   const minDraft = useAppStore((s) => s.simulationParams.minDraftAngle)
   const wallThickness = useAppStore((s) => s.simulationParams.wallThickness)
   const currentPartId = useAppStore((s) => s.currentPartId)
+  const customPartSpec = useAppStore((s) => s.customPartSpec)
 
-  const baseline = partSimInputs[currentPartId as PartId]
+  // For demo parts the baseline comes from the static partSimInputs table.
+  // For 'custom' parts the AI-emitted spec IS the baseline — buildCustomGeometry
+  // bakes the spec's L/W/H into the mesh, so scale stays at 1.0 until the
+  // user edits the Parameters panel.
+  const baseline =
+    currentPartId === 'custom' && customPartSpec
+      ? {
+          part_length: customPartSpec.partLength,
+          part_width: customPartSpec.partWidth,
+          part_height: customPartSpec.partHeight,
+        }
+      : getPartSimInputs(currentPartId as PartId)
   const lenParam = parameters.find((p) => p.id === 'p-len')?.value
   const widParam = parameters.find((p) => p.id === 'p-wid')?.value
   const heightParam = parameters.find((p) => p.id === 'p-height')?.value

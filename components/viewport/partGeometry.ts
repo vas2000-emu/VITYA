@@ -9,7 +9,9 @@ import * as THREE from 'three'
  * are only used when no `uploadedSTL` is set in the store.
  */
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
+import type { CustomPartShape } from '@/lib/types'
+
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper' | 'custom'
 
 /** Live geometry inputs. Defaults reflect the bumper hero baseline so
  *  loading without params yields the same look as before this change.
@@ -293,11 +295,143 @@ function buildBumperGeometry(): THREE.BufferGeometry {
   return mergeGeometries(meshes)
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Parameterized primitives for AI-generated parts (Track B). Each
+// builder produces a centered geometry whose bounding box matches the
+// requested L × H × W exactly, so the per-axis scaling in applyParams
+// stays at 1× when the panel matches the spec. shape="shell" hollows
+// out the top so the wall thickness is visible; the other shapes
+// render as solids.
+// ────────────────────────────────────────────────────────────────────
+
+function buildCustomBoxGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(length, height, width, 1, 1, 1)
+}
+
+function buildCustomCylinderGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // Length / width treated as diameters of an ellipse cross-section
+  // (radial scale applied after building a unit cylinder so a
+  // length != width yields an oval). Height runs along world Y.
+  const baseRadius = 0.5
+  const geom = new THREE.CylinderGeometry(baseRadius, baseRadius, height, 48, 1, false)
+  geom.scale(length, 1, width)
+  return geom
+}
+
+function buildCustomPlateGeometry(
+  length: number,
+  height: number,
+  width: number,
+): THREE.BufferGeometry {
+  // "Plate" = a thin box where height (Y) is small relative to L/W.
+  // We don't enforce that here; the AI prompt + tool description
+  // do — we just build a box of the requested dimensions.
+  return new THREE.BoxGeometry(length, height, width, 1, 1, 1)
+}
+
+function buildCustomShellGeometry(
+  length: number,
+  height: number,
+  width: number,
+  wallThickness: number,
+): THREE.BufferGeometry {
+  // Hollow rounded shell with an open top (phone-case / cup style).
+  // Footprint is a rounded rectangle (L × W), extruded up by height,
+  // hollowed by wallThickness on each side.
+  const r = Math.min(length, width) * 0.08
+  const outerHalfL = length / 2
+  const outerHalfW = width / 2
+  const outerShape = roundedShape(outerHalfL, outerHalfW, r)
+
+  const innerHalfL = Math.max(0.1, outerHalfL - wallThickness)
+  const innerHalfW = Math.max(0.1, outerHalfW - wallThickness)
+  const innerR = Math.max(0.1, r - wallThickness)
+  outerShape.holes.push(roundedPath(innerHalfL, innerHalfW, innerR))
+
+  const geom = new THREE.ExtrudeGeometry(outerShape, {
+    depth: height,
+    bevelEnabled: false,
+    curveSegments: 12,
+  })
+  // ExtrudeGeometry extrudes along +Z by default; rotate so the open
+  // top faces +Y, then re-center so the bbox is symmetric on Y.
+  geom.rotateX(-Math.PI / 2)
+  geom.translate(0, -height / 2, 0)
+  return geom
+}
+
+function traceRoundedRect(
+  curve: THREE.Shape | THREE.Path,
+  halfL: number,
+  halfW: number,
+  r: number,
+) {
+  curve.moveTo(-halfL + r, -halfW)
+  curve.lineTo(halfL - r, -halfW)
+  curve.quadraticCurveTo(halfL, -halfW, halfL, -halfW + r)
+  curve.lineTo(halfL, halfW - r)
+  curve.quadraticCurveTo(halfL, halfW, halfL - r, halfW)
+  curve.lineTo(-halfL + r, halfW)
+  curve.quadraticCurveTo(-halfL, halfW, -halfL, halfW - r)
+  curve.lineTo(-halfL, -halfW + r)
+  curve.quadraticCurveTo(-halfL, -halfW, -halfL + r, -halfW)
+}
+
+function roundedShape(halfL: number, halfW: number, r: number): THREE.Shape {
+  const shape = new THREE.Shape()
+  traceRoundedRect(shape, halfL, halfW, r)
+  return shape
+}
+
+function roundedPath(halfL: number, halfW: number, r: number): THREE.Path {
+  const path = new THREE.Path()
+  traceRoundedRect(path, halfL, halfW, r)
+  return path
+}
+
+/** Dispatch to the right parameterized primitive. Returns a centered
+ *  geometry whose bbox is exactly L × H × W; applyParams in the caller
+ *  applies draft + per-axis scaling on top. */
+export function buildCustomGeometry(
+  shape: CustomPartShape,
+  length: number,
+  height: number,
+  width: number,
+  wallThickness: number,
+): THREE.BufferGeometry {
+  switch (shape) {
+    case 'box':
+      return buildCustomBoxGeometry(length, height, width)
+    case 'cylinder':
+      return buildCustomCylinderGeometry(length, height, width)
+    case 'plate':
+      return buildCustomPlateGeometry(length, height, width)
+    case 'shell':
+      return buildCustomShellGeometry(length, height, width, wallThickness)
+  }
+}
+
+// Placeholder builder so the BUILDERS table type-checks; the actual
+// custom geometry is produced via buildCustomGeometry() at render time
+// because it needs the CustomPartSpec from the store.
+function buildCustomFallbackGeometry(): THREE.BufferGeometry {
+  return buildCustomBoxGeometry(100, 50, 80)
+}
+
 const BUILDERS: Record<PartId, () => THREE.BufferGeometry> = {
   bracket: buildBracketGeometry,
   phoneCase: buildPhoneCaseGeometry,
   droneArm: buildDroneArmGeometry,
   bumper: buildBumperGeometry,
+  custom: buildCustomFallbackGeometry,
 }
 
 // Cache only the un-parameterized baseline. Parameter-driven variants

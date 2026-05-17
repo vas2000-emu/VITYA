@@ -21,7 +21,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/useAppStore'
-import { partsLibrary } from '@/lib/mockMoldAnalysis'
+import { getDashboardAnalysis, partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { PartId } from '@/lib/types'
 
 type Tab = 'Part' | 'Evaluate' | 'AI Suggestions'
@@ -66,7 +66,7 @@ export function Toolbar() {
   }
   const handleClearUpload = () => {
     setUploadedSTL(null)
-    toast('Reverted to demo part', { description: partsLibrary[currentPartId as PartId]?.partName ?? '' })
+    toast('Reverted to demo part', { description: getDashboardAnalysis(currentPartId as PartId)?.partName ?? '' })
   }
 
   return (
@@ -114,7 +114,7 @@ export function Toolbar() {
             onSelectPart={(id) => {
               setUploadedSTL(null)
               setCurrentPartId(id)
-              toast(partsLibrary[id]?.partName ?? id, { description: 'Loaded from part library.' })
+              toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
             }}
             onUploadClick={handleUploadClick}
             onClearUpload={handleClearUpload}
@@ -179,7 +179,7 @@ function PartRibbon({
   onUploadClick: () => void
   onClearUpload: () => void
 }) {
-  const partIds = Object.keys(partsLibrary) as PartId[]
+  const partIds = Object.keys(partsLibrary) as Array<Exclude<PartId, 'custom'>>
   return (
     <>
       <RibbonGroup bordered>

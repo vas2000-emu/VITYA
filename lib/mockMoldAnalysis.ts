@@ -433,11 +433,25 @@ const bumper: MoldAnalysisResult = {
   ],
 }
 
-export const partsLibrary: Record<PartId, MoldAnalysisResult> = {
+// 'custom' is intentionally excluded — AI-generated parts don't carry
+// pre-authored rich-text issues / hotspots / supplier notes, so they
+// don't appear in the dashboard's part library. The workspace
+// surfaces (ManufacturingPanel, DFM HUD, /analysis/*) render against
+// live moldsim output instead.
+export const partsLibrary: Record<Exclude<PartId, 'custom'>, MoldAnalysisResult> = {
   bracket,
   phoneCase,
   droneArm,
   bumper,
+}
+
+/** Safe accessor for code that holds a widened PartId. Returns the
+ *  rich-text demo analysis for the four demo parts, or null for
+ *  'custom' (or any future widened variant). Call sites that need a
+ *  baseline default usually fall back to partsLibrary.bracket. */
+export function getDashboardAnalysis(id: PartId): MoldAnalysisResult | null {
+  if (id === 'custom') return null
+  return partsLibrary[id]
 }
 
 /** Default part loaded into the dashboard on first render. The bumper

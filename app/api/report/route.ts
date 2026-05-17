@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { MoldLocalReport } from '@/components/results/PDFReport'
-import { partsLibrary } from '@/lib/mockMoldAnalysis'
+import { getDashboardAnalysis, partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { PartId } from '@/lib/types'
 
 /**
@@ -20,7 +20,7 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const requestedId = (url.searchParams.get('partId') ?? 'bracket') as PartId
-  const analysis = partsLibrary[requestedId] ?? partsLibrary.bracket
+  const analysis = getDashboardAnalysis(requestedId) ?? partsLibrary.bracket
 
   const fixedParam = url.searchParams.get('fixed') ?? ''
   const fixedIssueIds = fixedParam

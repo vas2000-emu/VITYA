@@ -152,7 +152,27 @@ export interface MoldChecklistItem {
   status: MoldChecklistStatus
 }
 
-export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper'
+export type PartId = 'bracket' | 'phoneCase' | 'droneArm' | 'bumper' | 'custom'
+
+/** Allowed primitive shapes for AI-generated parts. Strict enum so the
+ *  renderer never receives a shape it can't build. */
+export type CustomPartShape = 'box' | 'cylinder' | 'plate' | 'shell'
+
+/** Spec emitted by the AI's create_part_from_description tool and held
+ *  in useAppStore.customPartSpec. Dimensions are all mm; the geometry
+ *  builder scales the primitive into those exact dimensions. */
+export interface CustomPartSpec {
+  shape: CustomPartShape
+  /** Human label, e.g. "iPhone 15 case" or "5x3 mounting plate". */
+  label: string
+  /** One-sentence description for context / display. */
+  description?: string
+  partLength: number
+  partWidth: number
+  partHeight: number
+  wallThickness: number
+  material: string
+}
 
 export interface MoldAnalysisResult {
   partId: PartId

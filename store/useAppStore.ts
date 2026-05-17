@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   AISuggestion,
+  CustomPartSpec,
   Parameter,
   RightPanelType,
   ChatMessage,
@@ -197,6 +198,13 @@ interface AppState {
   // Tuple = [sizeX, sizeY, sizeZ]; null when no STL is loaded.
   uploadedSTLBbox: [number, number, number] | null
   setUploadedSTLBbox: (b: [number, number, number] | null) => void
+
+  // AI-generated part spec — produced by the create_part_from_description
+  // tool. When currentPartId === 'custom', the viewport's Part component
+  // renders the procedural primitive described here instead of one of
+  // the four demo parts. null until the AI has built a part.
+  customPartSpec: CustomPartSpec | null
+  setCustomPartSpec: (spec: CustomPartSpec | null) => void
 
   // Flag flipped to true when an STL load completes; UploadAnalyzeModal
   // watches this and opens. Reset to false once the modal is dismissed
@@ -409,6 +417,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   uploadedSTLBbox: null,
   setUploadedSTLBbox: (b) => set({ uploadedSTLBbox: b }),
+  customPartSpec: null,
+  setCustomPartSpec: (spec) => set({ customPartSpec: spec }),
   pendingUploadAnalysis: false,
   setPendingUploadAnalysis: (pending) => set({ pendingUploadAnalysis: pending }),
 

@@ -7,8 +7,8 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { useAppStore } from '@/store/useAppStore'
 import { useResultsStore } from '@/store/useResultsStore'
-import { partsLibrary } from '@/lib/mockMoldAnalysis'
-import { getPartGeometry, type PartId } from './partGeometry'
+import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
+import { buildCustomGeometry, getPartGeometry, type PartId } from './partGeometry'
 import { useDebouncedGeometryParams } from './useDebouncedGeometryParams'
 import { MoldCheckerMaterial } from './MoldCheckerMaterial'
 import type { MoldIssue, MoldIssueSeverity } from '@/lib/types'
@@ -47,10 +47,26 @@ export function Part() {
   // store, debounced ~200ms so dragging a slider doesn't trash the
   // useMemo / vertex-color recompute on every keystroke.
   const geomParams = useDebouncedGeometryParams(200)
-  const proceduralGeom = useMemo(
-    () => getPartGeometry(currentPartId, geomParams),
-    [currentPartId, geomParams]
-  )
+  const customPartSpec = useAppStore((s) => s.customPartSpec)
+  const proceduralGeom = useMemo(() => {
+    // AI-generated parts dispatch to buildCustomGeometry against the
+    // spec held in the store. The spec already encodes L/H/W in mm so
+    // we skip getPartGeometry's per-axis scaling step (would double-
+    // scale) and just apply the draft taper on top.
+    if (currentPartId === 'custom' && customPartSpec) {
+      const geom = buildCustomGeometry(
+        customPartSpec.shape,
+        customPartSpec.partLength,
+        customPartSpec.partHeight,
+        customPartSpec.partWidth,
+        customPartSpec.wallThickness,
+      )
+      geom.computeVertexNormals()
+      geom.computeBoundingBox()
+      return geom
+    }
+    return getPartGeometry(currentPartId, geomParams)
+  }, [currentPartId, geomParams, customPartSpec])
   const [uploadedGeom, setUploadedGeom] = useState<THREE.BufferGeometry | null>(null)
   const meshRef = useRef<THREE.Mesh>(null)
 
@@ -95,7 +111,7 @@ export function Part() {
   // doesn't correspond to any known issue regions).
   const issues = useMemo<MoldIssue[]>(() => {
     if (uploadedSTL) return []
-    return partsLibrary[currentPartId]?.issues ?? []
+    return getDashboardAnalysis(currentPartId)?.issues ?? []
   }, [uploadedSTL, currentPartId])
 
   // Bake colors. Triangle-by-triangle:

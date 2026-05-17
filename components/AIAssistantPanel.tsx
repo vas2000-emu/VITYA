@@ -13,9 +13,11 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
-import { partsLibrary } from '@/lib/mockMoldAnalysis'
+import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
+import { runFullAnalysis } from '@/lib/moldsim-api'
 import type {
   ChatMessage,
+  CustomPartSpec,
   DesignChange,
   DesignField,
   DesignProposal,
@@ -117,9 +119,14 @@ export function AIAssistantPanel() {
     setAiThinking,
     simulationParams,
     updateSimulationParams,
+    setSimulationBaseline,
+    setSimulationResults,
     updateParameterValue,
     currentPartId,
+    setCurrentPartId,
     uploadedSTL,
+    setUploadedSTL,
+    setCustomPartSpec,
   } = useAppStore()
 
   // Dynamic suggestion-card state. Populated on mount via a single
@@ -136,7 +143,7 @@ export function AIAssistantPanel() {
   // Friendly part identity for the AI context. partsLibrary has hero
   // names + a one-line summary for each of the 4 demo parts; uploaded
   // STLs aren't in the library so we fall back to a generic label.
-  const partEntry = partsLibrary[currentPartId as PartId]
+  const partEntry = getDashboardAnalysis(currentPartId as PartId)
   const partName = uploadedSTL
     ? 'User-uploaded STL'
     : partEntry?.partName ?? currentPartId
@@ -264,6 +271,99 @@ export function AIAssistantPanel() {
     })
   }
 
+  /** Apply a CustomPartSpec emitted by create_part_from_description.
+   *  Registers the spec in the store, switches currentPartId to 'custom'
+   *  (which makes Part.tsx render the procedural primitive), pushes the
+   *  spec's dimensions into simulationParams + the Parameters panel,
+   *  then fires the moldsim API so every workspace surface lights up. */
+  const applyCustomPart = async (spec: CustomPartSpec) => {
+    // Clear any uploaded STL so the viewport shows the procedural part
+    // we're about to register, not the stale STL geometry.
+    if (uploadedSTL) {
+      URL.revokeObjectURL(uploadedSTL)
+      setUploadedSTL(null)
+    }
+    setCustomPartSpec(spec)
+    setCurrentPartId('custom')
+
+    // Thin-shell volume / weight proxy, same approach the upload modal uses.
+    const volCm3 =
+      (spec.partLength * spec.partWidth * spec.partHeight * spec.wallThickness) /
+      1_000_000
+    const partVolume = Math.max(1, volCm3)
+    const partWeight = Math.max(1, volCm3 * 1)
+    const projectedArea = Math.max(1, (spec.partLength * spec.partHeight) / 100)
+
+    setSimulationBaseline({
+      material: spec.material,
+      wallThickness: spec.wallThickness,
+      partVolume,
+      partWeight,
+      projectedArea,
+      partLength: spec.partLength,
+      partWidth: spec.partWidth,
+      partHeight: spec.partHeight,
+    })
+    updateSimulationParams({
+      material: spec.material,
+      wallThickness: spec.wallThickness,
+      partVolume,
+      partWeight,
+      projectedArea,
+      partLength: spec.partLength,
+      partWidth: spec.partWidth,
+      partHeight: spec.partHeight,
+      complexity: 'moderate',
+      minDraftAngle: 2,
+      productionQuantity: 10_000,
+      meltTemp: 230,
+      moldTemp: 50,
+      numCavities: 1,
+      numUndercuts: 0,
+      hasSharpCorners: false,
+      hasUniformWall: true,
+    })
+    updateParameterValue('p-len', spec.partLength)
+    updateParameterValue('p-wid', spec.partWidth)
+    updateParameterValue('p-height', spec.partHeight)
+    updateParameterValue('p-wall', spec.wallThickness)
+    updateParameterValue('p-draft', 2)
+
+    setSimulationResults({ isLoading: true, error: null })
+    try {
+      const results = await runFullAnalysis({
+        material: spec.material,
+        wall_thickness: spec.wallThickness,
+        part_volume: partVolume,
+        part_weight: partWeight,
+        projected_area: projectedArea,
+        part_length: spec.partLength,
+        part_width: spec.partWidth,
+        part_height: spec.partHeight,
+        melt_temp: 230,
+        mold_temp: 50,
+        production_quantity: 10_000,
+        complexity: 'moderate',
+        num_cavities: 1,
+        num_undercuts: 0,
+        min_draft_angle: 2,
+        has_sharp_corners: false,
+        has_uniform_wall: true,
+      })
+      setSimulationResults({
+        cost: results.cost,
+        cooling: results.cooling,
+        dfm: results.manufacturing,
+        filling: results.filling,
+        isLoading: false,
+        error: null,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to analyze new part'
+      setSimulationResults({ isLoading: false, error: msg })
+    }
+  }
+
   const sendMessage = async (overrideText?: string) => {
     const text = (overrideText ?? message).trim()
     if (!text || isAiThinking) return
@@ -300,7 +400,12 @@ export function AIAssistantPanel() {
           },
         }),
       })
-      const data = await res.json() as { reply?: string; proposal?: DesignProposal; error?: string }
+      const data = (await res.json()) as {
+        reply?: string
+        proposal?: DesignProposal
+        customPart?: CustomPartSpec
+        error?: string
+      }
       if (!res.ok) {
         addChatMessage({
           role: 'assistant',
@@ -312,6 +417,12 @@ export function AIAssistantPanel() {
           content: data.reply ?? '(no response)',
           proposal: data.proposal,
         })
+        // create_part_from_description short-circuits on the server and
+        // returns a CustomPartSpec. Apply it asynchronously so the chat
+        // bubble paints before the geometry swap kicks off.
+        if (data.customPart) {
+          void applyCustomPart(data.customPart)
+        }
       }
     } catch {
       addChatMessage({

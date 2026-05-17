@@ -5,7 +5,10 @@ import { useResultsStore, computeCurrentScore } from '@/store/useResultsStore'
 import { partsLibrary } from '@/lib/mockMoldAnalysis'
 import type { PartId } from '@/lib/types'
 
-const ICONS: Record<PartId, React.ReactNode> = {
+// Icons only cover the demo parts. 'custom' is intentionally excluded;
+// the AI-generated custom part lives in the workspace and never appears
+// in the dashboard's part library sidebar.
+const ICONS: Record<Exclude<PartId, 'custom'>, React.ReactNode> = {
   bracket: <Box className="size-5" />,
   phoneCase: <Smartphone className="size-5" />,
   droneArm: <Plane className="size-5" />,
@@ -22,7 +25,7 @@ export function PartsSidebar() {
   const fixedIssueIds = useResultsStore((s) => s.fixedIssueIds)
   const selectPart = useResultsStore((s) => s.selectPart)
 
-  const partIds = Object.keys(partsLibrary) as PartId[]
+  const partIds = Object.keys(partsLibrary) as Array<Exclude<PartId, 'custom'>>
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">

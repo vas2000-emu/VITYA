@@ -14,7 +14,19 @@
 import type { FullAnalysisRequest } from '@/lib/moldsim-api'
 import type { PartId } from '@/lib/types'
 
-export const partSimInputs: Record<PartId, FullAnalysisRequest> = {
+// 'custom' is intentionally excluded — AI-generated parts get their
+// FullAnalysisRequest built on the fly by the AIAssistantPanel when
+// the create_part_from_description tool fires, so they don't need a
+// static entry here.
+/** Safe accessor for code that holds a widened PartId. Returns the
+ *  preset request for the four demo parts, or null for 'custom'
+ *  (those use AIAssistantPanel's on-the-fly request instead). */
+export function getPartSimInputs(id: PartId): FullAnalysisRequest | null {
+  if (id === 'custom') return null
+  return partSimInputs[id]
+}
+
+export const partSimInputs: Record<Exclude<PartId, 'custom'>, FullAnalysisRequest> = {
   bracket: {
     material: 'ABS',
     wall_thickness: 2.5,

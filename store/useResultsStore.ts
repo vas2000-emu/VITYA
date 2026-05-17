@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { toast } from 'sonner'
-import { moldAnalysisData, partsLibrary } from '@/lib/mockMoldAnalysis'
-import { partSimInputs } from '@/lib/partSimInputs'
+import { moldAnalysisData, getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
+import { getPartSimInputs } from '@/lib/partSimInputs'
 import { runFullAnalysis, type FullAnalysisResponse } from '@/lib/moldsim-api'
 import { useAppStore } from '@/store/useAppStore'
 import type { MoldAnalysisResult, PartId } from '@/lib/types'
@@ -128,7 +128,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   },
 
   selectPart: (id) => {
-    const next = partsLibrary[id]
+    const next = getDashboardAnalysis(id)
     if (!next) {
       toast.error(`Unknown part "${id}"`)
       return
@@ -155,7 +155,7 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     // (cost, draft, thickness, undercut, on-demand) reflect this part
     // when the user navigates there. partSimInputs uses the API's
     // snake_case shape; simulationParams uses camelCase — map across.
-    const inputs = partSimInputs[id]
+    const inputs = getPartSimInputs(id)
     if (inputs) {
       // Reset the scaling baseline FIRST so the dimension-derived
       // fields (volume/weight/projectedArea) lock onto this preset's
@@ -206,8 +206,9 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   runMoldsim: async () => {
     const myToken = ++simulateToken
     const partId = get().analysis.partId
-    const inputs = partSimInputs[partId]
-    if (!inputs) {
+    const inputs = getPartSimInputs(partId)
+    const baseMock = getDashboardAnalysis(partId)
+    if (!inputs || !baseMock) {
       toast.error(`No simulation inputs for "${partId}"`)
       return
     }
@@ -231,8 +232,9 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
 
       // Map API response into the dashboard's analysis shape. We keep the
       // rich-text mock fields (issues, recommendations, supplier notes)
-      // and override the scalar metrics with live values.
-      const baseMock = partsLibrary[partId]
+      // and override the scalar metrics with live values. baseMock + inputs
+      // were resolved up top so the early-return runs before we kick the
+      // loading phases.
       const dfmScore = Math.round(results.manufacturing.overall_score)
       const tooling = results.cost.total_tooling_cost
       const perPart = results.cost.total_cost_per_part
