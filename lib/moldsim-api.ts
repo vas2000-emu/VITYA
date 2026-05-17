@@ -139,12 +139,21 @@ export interface FullAnalysisResponse {
   filling: FillingResponse;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Analysis request timed out after ${ms}ms`)), ms)
+    ),
+  ])
+}
+
 export async function runFullAnalysis(
   params: FullAnalysisRequest
 ): Promise<FullAnalysisResponse> {
   // Run all analyses in parallel
   const [cost, cooling, manufacturing, filling] = await Promise.all([
-    calculateCost({
+    withTimeout(calculateCost({
       material: params.material,
       part_volume: params.part_volume,
       part_weight: params.part_weight,
@@ -156,14 +165,14 @@ export async function runFullAnalysis(
       num_undercuts: params.num_undercuts,
       melt_temp: params.melt_temp,
       mold_temp: params.mold_temp,
-    }),
-    calculateCooling({
+    }), 10000),
+    withTimeout(calculateCooling({
       material: params.material,
       wall_thickness: params.wall_thickness,
       melt_temp: params.melt_temp,
       mold_temp: params.mold_temp,
-    }),
-    checkManufacturing({
+    }), 10000),
+    withTimeout(checkManufacturing({
       wall_thickness: params.wall_thickness,
       min_draft_angle: params.min_draft_angle,
       num_undercuts: params.num_undercuts,
@@ -173,14 +182,14 @@ export async function runFullAnalysis(
       part_width: params.part_width,
       part_height: params.part_height,
       material: params.material,
-    }),
-    calculateFilling({
+    }), 10000),
+    withTimeout(calculateFilling({
       material: params.material,
       wall_thickness: params.wall_thickness,
       flow_length: Math.max(params.part_length, params.part_width),
       melt_temp: params.melt_temp,
       mold_temp: params.mold_temp,
-    }),
+    }), 10000),
   ]);
 
   return { cost, cooling, manufacturing, filling };

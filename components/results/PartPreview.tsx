@@ -37,7 +37,7 @@ function Hotspot({ issue }: { issue: MoldIssue }) {
       >
         <span
           className={`absolute inset-0 rounded-full ${
-            isFixed ? '' : 'animate-ping'
+            isFixed ? '' : 'motion-safe:animate-ping'
           } ${isFixed ? '' : SEVERITY_RING[issue.severity].split(' ')[0]}`}
         />
       </span>

@@ -1,18 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  ThumbsUp,
-  ThumbsDown,
   Check,
   X,
   PanelRightClose,
   PanelRight,
   Sparkles,
-  RefreshCw,
-  Loader2,
+  Trash2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { useLiveDfmScore } from './viewport/useLiveDfmScore'
 import { getDashboardAnalysis } from '@/lib/mockMoldAnalysis'
 import { runFullAnalysis } from '@/lib/moldsim-api'
 import { generateCustomPartReport } from '@/lib/aiReport'
@@ -75,44 +73,165 @@ function formatChangeValue(field: DesignField, value: number | string): string {
   return value.toString()
 }
 
-/** Inverse of ParameterPanel's paramToSimulationKey. Only the design
- *  parameters that have a row in the left-hand Parameters panel get a
- *  mapping; material / numCavities / productionQuantity are only in
- *  simulationParams (not in `parameters[]`), so the accept handler
- *  skips updateParameterValue for those. */
-const FIELD_TO_PARAM_ID: Partial<Record<DesignField, string>> = {
-  wallThickness: 'p-wall',
-  minDraftAngle: 'p-draft',
-  partLength: 'p-len',
-  partWidth: 'p-wid',
-  partHeight: 'p-height',
+type IssueHint = { severity: string; category: string; issue: string; recommendation: string }
+
+/** Returns 4 chat quick-prompts tailored to the live DFM issues. The
+ *  first prompt targets the worst current issue when one exists. */
+function buildDynamicQuickPrompts(issues: IssueHint[]): { label: string; prompt: string }[] {
+  const actionable = issues.filter((i) => i.severity !== 'info')
+  const worst = actionable.find((i) => i.severity === 'critical') ?? actionable[0]
+
+  const first: { label: string; prompt: string } = worst
+    ? {
+        label: `Fix ${worst.category}`,
+        prompt: `The part has a ${worst.category} issue: "${worst.issue}". Recommendation: "${worst.recommendation}". Propose a concrete fix using the propose_design_change tool.`,
+      }
+    : {
+        label: 'Suggest improvements',
+        prompt:
+          "Look at the current part and propose 2-3 specific changes that would improve moldability or cost. Use the propose_design_change tool — don't just describe.",
+      }
+
+  return [
+    first,
+    {
+      label: 'Reduce cost',
+      prompt: 'What single change would most reduce the per-part cost without hurting quality? Propose it.',
+    },
+    {
+      label: 'Find shops',
+      prompt: "I'm in 49503. Which local shops could build this part? Use the find_local_shops tool.",
+    },
+    {
+      label: 'New part',
+      prompt: 'Make me a new part — a [describe what you want].',
+    },
+  ]
 }
 
-// Quick prompts seed the chat with action-oriented requests instead of
-// open-ended questions. Each one nudges the AI toward calling a tool
-// (propose_design_change / create_part_from_description / find_local_shops)
-// rather than just talking. Easy to swap per demo.
-const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  {
-    label: 'Suggest improvements',
-    prompt:
-      "Look at the current part and propose 2-3 specific changes that would improve moldability or cost. Use the propose_design_change tool — don't just describe.",
+/** Generates up to 3 DesignProposal cards from live DFM issues without
+ *  an AI round-trip. Each proposal maps to a concrete DesignChange so
+ *  the user can accept it immediately. Falls back to scale/material
+ *  suggestions when no actionable issues exist. */
+function generateRuleBasedSuggestions(
+  issues: IssueHint[],
+  sp: {
+    wallThickness: number
+    minDraftAngle: number
+    numCavities: number
+    productionQuantity: number
+    material: string
+    partLength: number
+    partWidth: number
+    partHeight: number
   },
-  {
-    label: 'Reduce cost',
-    prompt:
-      'What single change would most reduce the per-part cost without hurting quality? Propose it.',
-  },
-  {
-    label: 'Find shops nearby',
-    prompt:
-      "I'm in 49503. Which local shops could build this part? Use the find_local_shops tool.",
-  },
-  {
-    label: 'New part',
-    prompt: 'Make me a new part — a [describe what you want].',
-  },
-]
+): DesignProposal[] {
+  const out: DesignProposal[] = []
+  let n = Date.now()
+  const uid = () => `rule-${n++}`
+
+  const wallIssue = issues.find((i) => i.category === 'Wall Thickness')
+  if (wallIssue) {
+    if (wallIssue.issue.toLowerCase().includes('thin')) {
+      out.push({
+        id: uid(),
+        title: 'Increase wall thickness',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: Math.max(1.2, sp.wallThickness * 1.5) }],
+        status: 'pending',
+      })
+    } else if (wallIssue.issue.toLowerCase().includes('thick')) {
+      out.push({
+        id: uid(),
+        title: 'Core out thick walls',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: Math.min(sp.wallThickness * 0.75, 4.5) }],
+        status: 'pending',
+      })
+    } else {
+      out.push({
+        id: uid(),
+        title: 'Optimize wall thickness',
+        rationale: wallIssue.recommendation,
+        changes: [{ field: 'wallThickness', value: 2.5 }],
+        status: 'pending',
+      })
+    }
+  }
+
+  const draftIssue = issues.find((i) => i.category === 'Draft Angle')
+  if (draftIssue) {
+    out.push({
+      id: uid(),
+      title: 'Increase draft angle',
+      rationale: draftIssue.recommendation,
+      changes: [{ field: 'minDraftAngle', value: Math.max(2, sp.minDraftAngle + 1.5) }],
+      status: 'pending',
+    })
+  }
+
+  const sizeIssue = issues.find((i) => i.category === 'Part Size')
+  if (sizeIssue && out.length < 3) {
+    out.push({
+      id: uid(),
+      title: 'Reduce part dimensions',
+      rationale: sizeIssue.recommendation,
+      changes: [
+        { field: 'partLength', value: Math.round(sp.partLength * 0.75) },
+        { field: 'partWidth', value: Math.round(sp.partWidth * 0.75) },
+      ],
+      status: 'pending',
+    })
+  }
+
+  const hasCostlyComplexity = issues.some(
+    (i) =>
+      ['Undercuts', 'Corner Radii', 'Wall Uniformity', 'Aspect Ratio'].includes(i.category) &&
+      i.severity !== 'info',
+  )
+  if (hasCostlyComplexity && out.length < 3) {
+    out.push({
+      id: uid(),
+      title: 'Scale production to offset tooling cost',
+      rationale:
+        'Geometric complexity raises tooling costs. Increasing cavity count and production volume spreads the fixed cost, reducing per-part price.',
+      changes: [
+        { field: 'numCavities', value: Math.max(sp.numCavities, 2) },
+        { field: 'productionQuantity', value: Math.max(sp.productionQuantity, 50000) },
+      ],
+      status: 'pending',
+    })
+  }
+
+  // Fallbacks for well-optimized parts
+  if (out.length === 0) {
+    if (sp.numCavities < 4) {
+      out.push({
+        id: uid(),
+        title: 'Scale up production',
+        rationale:
+          'The part is well-optimized for molding. Adding cavities reduces per-part cost by running multiple parts per cycle.',
+        changes: [
+          { field: 'numCavities', value: 4 },
+          { field: 'productionQuantity', value: 100000 },
+        ],
+        status: 'pending',
+      })
+    }
+    out.push({
+      id: uid(),
+      title: sp.material !== 'ABS' ? 'Upgrade to ABS' : 'Switch to PP for lower cost',
+      rationale:
+        sp.material !== 'ABS'
+          ? 'With strong moldability, upgrading to ABS adds impact resistance and a better surface finish without redesign.'
+          : 'Polypropylene offers excellent chemical resistance at a lower material cost than ABS, with good moldability for this geometry.',
+      changes: [{ field: 'material', value: sp.material !== 'ABS' ? 'ABS' : 'PP' }],
+      status: 'pending',
+    })
+  }
+
+  return out.slice(0, 3)
+}
 
 export function AIAssistantPanel() {
   const [message, setMessage] = useState('')
@@ -124,6 +243,7 @@ export function AIAssistantPanel() {
     addChatMessage,
     updateChatMessage,
     setAiThinking,
+    clearChat,
     simulationParams,
     updateSimulationParams,
     setSimulationBaseline,
@@ -135,156 +255,46 @@ export function AIAssistantPanel() {
     setUploadedSTL,
     setCustomPartSpec,
     addUserPart,
-    aiPartSuggestions,
     setAiPartSuggestions,
-    patchAiPartSuggestion,
+    applyDesignProposal,
   } = useAppStore()
 
   const setAnalysis = useResultsStore((s) => s.setAnalysis)
 
-  // Dynamic suggestion-card state lives in useAppStore so the
-  // Toolbar's AI Suggestions ribbon can show the same list without a
-  // duplicate fetch. The panel + the ribbon both read aiPartSuggestions
-  // and dispatch through the shared patchAiPartSuggestion.
-  const suggestions = aiPartSuggestions.items
-  const suggestionsLoading = aiPartSuggestions.loading
-  const suggestionsError = aiPartSuggestions.error
-  // Guard the on-mount fetch so React StrictMode's double-invoke (or a
-  // currentPartId effect re-fire) doesn't trigger two concurrent calls.
-  const suggestionsFetchedFor = useRef<string | null>(null)
+  const { issues: liveIssues, score: liveScore } = useLiveDfmScore()
 
-  // Friendly part identity for the AI context. partsLibrary has hero
-  // names + a one-line summary for each of the 4 demo parts; uploaded
-  // STLs aren't in the library so we fall back to a generic label.
+  // Friendly part identity for the AI context.
   const partEntry = getDashboardAnalysis(currentPartId as PartId)
   const partName = uploadedSTL
     ? 'User-uploaded STL'
     : partEntry?.partName ?? currentPartId
   const partSummary = uploadedSTL ? undefined : partEntry?.partSummary
 
-  // Snapshot the live part state into the AI context payload. Memoized
-  // via the explicit dep list rather than useMemo since it's only
-  // built at call-time inside sendMessage / fetchSuggestions.
-  const buildContext = useCallback(
-    () => ({
-      partId: currentPartId,
-      partName,
-      partSummary,
-      material: simulationParams.material,
-      wallThickness: simulationParams.wallThickness,
-      minDraftAngle: simulationParams.minDraftAngle,
-      partLength: simulationParams.partLength,
-      partWidth: simulationParams.partWidth,
-      partHeight: simulationParams.partHeight,
-      numUndercuts: simulationParams.numUndercuts,
-    }),
-    [currentPartId, partName, partSummary, simulationParams],
-  )
-
-  const fetchSuggestions = useCallback(async () => {
-    setAiPartSuggestions({
-      partId: currentPartId,
-      loading: true,
-      error: null,
-    })
-    try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Generate 2-3 distinct design optimizations for the current part. Each one should target a different angle (e.g. moldability, cost, material). Return them as separate propose_design_change tool calls.',
-            },
-          ],
-          context: buildContext(),
-          intent: 'suggestions',
-        }),
-      })
-      const data = (await res.json()) as {
-        proposals?: DesignProposal[]
-        proposal?: DesignProposal
-        error?: string
-      }
-      if (!res.ok) {
-        setAiPartSuggestions({
-          loading: false,
-          error: data.error ?? `HTTP ${res.status}`,
-          items: [],
-        })
-        return
-      }
-      // Model may collapse to a single proposal; accept either shape.
-      const next = data.proposals ?? (data.proposal ? [data.proposal] : [])
-      setAiPartSuggestions({ loading: false, error: null, items: next })
-    } catch (err) {
-      setAiPartSuggestions({
-        loading: false,
-        error: err instanceof Error ? err.message : 'Network error',
-        items: [],
-      })
-    }
-  }, [buildContext, currentPartId, setAiPartSuggestions])
-
-  // Fetch one set of suggestions per part. Switching parts re-fetches;
-  // edits within the same part don't (user can hit Regenerate).
-  useEffect(() => {
-    if (suggestionsFetchedFor.current === currentPartId) return
-    suggestionsFetchedFor.current = currentPartId
-    void fetchSuggestions()
-  }, [currentPartId, fetchSuggestions])
-
-  const handleAcceptSuggestion = (proposal: DesignProposal) => {
-    const patch: Record<string, number | string> = {}
-    for (const change of proposal.changes) {
-      patch[change.field] = change.value
-      const paramId = FIELD_TO_PARAM_ID[change.field]
-      if (paramId && typeof change.value === 'number') {
-        updateParameterValue(paramId, change.value)
-      }
-    }
-    updateSimulationParams(patch)
-    patchAiPartSuggestion(proposal.id, { status: 'accepted' })
-  }
-
-  const handleRejectSuggestion = (proposal: DesignProposal) => {
-    patchAiPartSuggestion(proposal.id, { status: 'rejected' })
-  }
-
-  /** Apply a proposal's changes. simulationParams drives the 3D
-   *  geometry, the live DFM score, and the analysis pages — one
-   *  updateSimulationParams call fans out to all of those. But the
-   *  left-hand Parameters panel reads from the separate `parameters[]`
-   *  array, so we also have to call updateParameterValue per change so
-   *  the panel's displayed number matches what was actually applied
-   *  downstream. */
   const handleAcceptProposal = (messageId: string, proposal: DesignProposal) => {
-    // Accumulator covers both number-valued fields (dimensions, draft,
-    // cavities, qty) and string-valued ones (material). Cast at the
-    // dispatch boundary; updateSimulationParams takes Partial<SimulationParams>.
-    const patch: Record<string, number | string> = {}
-    for (const change of proposal.changes) {
-      patch[change.field] = change.value
-      const paramId = FIELD_TO_PARAM_ID[change.field]
-      // Only mirror into parameters[] when there's a row for it in the
-      // panel. material / numCavities / productionQuantity live only in
-      // simulationParams and skip this step.
-      if (paramId && typeof change.value === 'number') {
-        updateParameterValue(paramId, change.value)
-      }
+    applyDesignProposal(proposal)
+    const msg = chatMessages.find((m) => m.id === messageId)
+    if (msg?.proposals) {
+      updateChatMessage(messageId, {
+        proposals: msg.proposals.map((p) =>
+          p.id === proposal.id ? { ...p, status: 'accepted' as const } : p,
+        ),
+      })
+    } else {
+      updateChatMessage(messageId, { proposal: { ...proposal, status: 'accepted' } })
     }
-    updateSimulationParams(patch)
-    updateChatMessage(messageId, {
-      proposal: { ...proposal, status: 'accepted' },
-    })
   }
 
   const handleRejectProposal = (messageId: string, proposal: DesignProposal) => {
-    updateChatMessage(messageId, {
-      proposal: { ...proposal, status: 'rejected' },
-    })
+    const msg = chatMessages.find((m) => m.id === messageId)
+    if (msg?.proposals) {
+      updateChatMessage(messageId, {
+        proposals: msg.proposals.map((p) =>
+          p.id === proposal.id ? { ...p, status: 'rejected' as const } : p,
+        ),
+      })
+    } else {
+      updateChatMessage(messageId, { proposal: { ...proposal, status: 'rejected' } })
+    }
   }
 
   /** Apply a CustomPartSpec emitted by create_part_from_description.
@@ -446,12 +456,20 @@ export function AIAssistantPanel() {
             partWidth: simulationParams.partWidth,
             partHeight: simulationParams.partHeight,
             numUndercuts: simulationParams.numUndercuts,
+            dfmScore: liveScore,
+            dfmIssues: liveIssues.map((i) => ({
+              severity: i.severity,
+              category: i.category,
+              issue: i.issue,
+              recommendation: i.recommendation,
+            })),
           },
         }),
       })
       const data = (await res.json()) as {
         reply?: string
         proposal?: DesignProposal
+        proposals?: DesignProposal[]
         customPart?: CustomPartSpec
         error?: string
       }
@@ -461,14 +479,23 @@ export function AIAssistantPanel() {
           content: `Couldn't reach the model: ${data.error ?? res.statusText}`,
         })
       } else {
+        const incomingProposals = data.proposals ?? (data.proposal ? [data.proposal] : [])
         addChatMessage({
           role: 'assistant',
           content: data.reply ?? '(no response)',
-          proposal: data.proposal,
+          // Single proposal stays on the message directly; multiple go in the
+          // proposals array so ChatBubble can render a card per proposal.
+          ...(incomingProposals.length === 1
+            ? { proposal: incomingProposals[0] }
+            : incomingProposals.length > 1
+              ? { proposals: incomingProposals }
+              : {}),
         })
-        // create_part_from_description short-circuits on the server and
-        // returns a CustomPartSpec. Apply it asynchronously so the chat
-        // bubble paints before the geometry swap kicks off.
+        // Sync proposals to the toolbar ribbon so they're accessible
+        // from the AI Optimizations tab without reopening the panel.
+        if (incomingProposals.length > 0) {
+          setAiPartSuggestions({ partId: currentPartId, items: incomingProposals, loading: false, error: null })
+        }
         if (data.customPart) {
           void applyCustomPart(data.customPart)
         }
@@ -503,65 +530,37 @@ export function AIAssistantPanel() {
     <div className="h-full flex flex-col bg-zinc-900">
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h2 className="font-medium">AI Assistant</h2>
-        <button
-          onClick={() => setRightCollapsed(true)}
-          className="p-1 hover:bg-zinc-800 rounded"
-          title="Collapse AI Assistant"
-        >
-          <PanelRightClose className="size-4" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-sm text-zinc-300">
-            <Sparkles className="size-4 text-blue-300" />
-            <span className="font-medium">Suggested optimizations</span>
-            {suggestionsLoading && <Loader2 className="size-3 animate-spin text-zinc-500" />}
-          </div>
+        <div className="flex items-center gap-1">
+          {chatMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => clearChat()}
+              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-zinc-300"
+              title="Clear conversation"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
           <button
-            type="button"
-            onClick={() => void fetchSuggestions()}
-            disabled={suggestionsLoading}
-            title="Regenerate optimizations"
-            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded disabled:opacity-40"
+            onClick={() => setRightCollapsed(true)}
+            className="p-1 hover:bg-zinc-800 rounded"
+            title="Collapse AI Assistant"
           >
-            <RefreshCw className={`size-3 ${suggestionsLoading ? 'animate-spin' : ''}`} />
-            Regenerate
+            <PanelRightClose className="size-4" />
           </button>
         </div>
+      </div>
 
-        {suggestionsError && (
-          <div className="text-xs px-3 py-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-200">
-            Couldn&apos;t generate suggestions: {suggestionsError}
-          </div>
-        )}
-
-        {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && (
-          <div className="border border-dashed border-zinc-700 rounded-lg p-4 text-center">
-            <div className="text-xs text-zinc-500">
-              No suggestions yet. Hit Regenerate to ask the AI.
-            </div>
-          </div>
-        )}
-
-        {suggestions.map((proposal) => (
-          <ProposalCard
-            key={proposal.id}
-            proposal={proposal}
-            onAccept={() => handleAcceptSuggestion(proposal)}
-            onReject={() => handleRejectSuggestion(proposal)}
-          />
-        ))}
-
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {chatMessages.length === 0 && !isAiThinking ? (
-          <div className="border border-dashed border-zinc-700 rounded-lg p-6 text-center">
+          <div className="border border-dashed border-zinc-700 rounded-lg p-6 text-center mt-4">
+            <Sparkles className="size-5 text-blue-300/60 mx-auto mb-2" />
             <div className="text-sm text-zinc-500">
-              AI will suggest optimizations as you work
+              Ask the AI to suggest improvements, reduce cost, or create a new part
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <>
             {chatMessages.map((m) => (
               <ChatBubble
                 key={m.id}
@@ -576,7 +575,7 @@ export function AIAssistantPanel() {
                 muted
               />
             )}
-          </div>
+          </>
         )}
       </div>
 
@@ -605,7 +604,7 @@ export function AIAssistantPanel() {
           </button>
         </div>
         <div className="flex gap-2 mt-2">
-          {QUICK_PROMPTS.map((q) => (
+          {buildDynamicQuickPrompts(liveIssues).map((q) => (
             <button
               key={q.label}
               onClick={() => void sendMessage(q.prompt)}
@@ -654,6 +653,14 @@ function ChatBubble({
           onReject={() => onRejectProposal?.(message.id, message.proposal!)}
         />
       )}
+      {message.proposals?.map((p) => (
+        <ProposalCard
+          key={p.id}
+          proposal={p}
+          onAccept={() => onAcceptProposal?.(message.id, p)}
+          onReject={() => onRejectProposal?.(message.id, p)}
+        />
+      ))}
     </div>
   )
 }

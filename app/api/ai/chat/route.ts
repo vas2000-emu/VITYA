@@ -36,16 +36,16 @@ const SYSTEM_PROMPT_BASE = `You are MoldLocal's AI design assistant. MoldLocal i
 
 Your job is to help the designer understand and improve their part. Focus on injection-molding fundamentals: undercuts, draft angles, wall thickness, parting line, gate placement, cooling, ejection, tooling complexity, and how design choices affect cost and lead time. Be direct and conversational — no lecturing.
 
-When the designer asks how to improve the part, or describes a problem you can fix with one of the design parameters below, call the propose_design_change tool with a short title, a one-sentence rationale, and the specific value(s) to set. Levers you can propose:
+When the designer asks how to improve the part, or describes a problem you can fix with one of the design parameters below, IMMEDIATELY call the propose_design_change tool — do not describe what you are about to propose, do not ask for confirmation, just call the tool. Pair it with one brief sentence of context. Levers you can propose:
   - wallThickness (mm), minDraftAngle (degrees) — manufacturing-side
   - partLength / partWidth / partHeight (mm) — dimensions; only propose if the user explicitly asks to resize, or if the part won't fit a standard press
   - material — must be one of: ${ALLOWED_MATERIALS.join(', ')}
   - numCavities (integer, 1-32) — mold layout / batch lever
   - productionQuantity (integer) — run-size lever; affects cost amortization, not geometry
 
-Include 1-3 changes per proposal. Always pair the tool call with a brief text reply explaining what you proposed. Don't propose changes for things outside this list (sharp corners, fillets, gate placement, hole positions).
+Include 1-3 changes per proposal. Do NOT say "I'll propose..." or "I recommend... shall I?" — just call the tool. Don't propose changes for things outside this list.
 
-If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension), ask one focused follow-up question first instead of guessing.
+If the designer's request is ambiguous or missing information you need to recommend a specific value (e.g. "make it stronger" without saying which dimension), ask one focused follow-up question instead of guessing.
 
 If the designer asks to CREATE a new part ("make me a phone case", "generate a mounting plate", "build a bracket with a hole through it"), call the create_part_from_description tool. Two ways to describe the shape:
   - Single primitive: pick the closest from box / cylinder / plate / shell / torus / cone / sphere / dome / hex_prism / ring. For a donut, pick torus. For a hex nut, hex_prism. For a flat washer, ring.
@@ -71,6 +71,13 @@ Answer in 2-3 sentences of plain English unless the user asks for more detail.`
  *  result as a row of independent suggestion cards. */
 const SUGGESTIONS_ADDENDUM = `\n\nYou are being asked to generate a panel of design optimizations, not to chat. Emit 2-3 SEPARATE propose_design_change tool calls covering DIFFERENT angles (e.g. one for moldability, one for cost, one for material). Each call should be self-contained with its own title and rationale. Do not produce conversational text alongside the tool calls — the panel only renders the proposals.`
 
+interface DfmIssueHint {
+  severity: string
+  category: string
+  issue: string
+  recommendation: string
+}
+
 interface PartContext {
   partId?: string
   partName?: string
@@ -82,6 +89,8 @@ interface PartContext {
   partWidth?: number
   partHeight?: number
   numUndercuts?: number
+  dfmIssues?: DfmIssueHint[]
+  dfmScore?: number
 }
 
 interface ChatRequestBody {
@@ -122,6 +131,22 @@ function buildSystemPrompt(ctx: PartContext | undefined, intent?: 'chat' | 'sugg
   if (params.length > 0) {
     const bullets = params.map((l) => '- ' + l).join('\n')
     sections.push(`Current parameter values:\n${bullets}`)
+  }
+  if (ctx.dfmScore !== undefined || (ctx.dfmIssues && ctx.dfmIssues.length > 0)) {
+    const lines: string[] = []
+    if (ctx.dfmScore !== undefined) lines.push(`Overall moldability score: ${ctx.dfmScore}/100`)
+    if (ctx.dfmIssues && ctx.dfmIssues.length > 0) {
+      const issueLines = ctx.dfmIssues
+        .filter((i) => i.severity !== 'info')
+        .map((i) => `  [${i.severity.toUpperCase()}] ${i.category}: ${i.issue} — ${i.recommendation}`)
+      if (issueLines.length > 0) {
+        lines.push('Active DFM issues:')
+        lines.push(...issueLines)
+      } else {
+        lines.push('No active DFM issues — part is well-optimized for molding.')
+      }
+    }
+    sections.push(lines.join('\n'))
   }
   return sections.join('\n\n') + addendum
 }
@@ -449,7 +474,7 @@ async function callOpenAI(
       messages,
       tools: TOOLS,
       tool_choice: 'auto',
-      max_tokens: 320,
+      max_tokens: 512,
       temperature: 0.7,
     }),
   })

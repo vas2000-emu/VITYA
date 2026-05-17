@@ -101,7 +101,7 @@ export function Part() {
 
   useEffect(() => {
     if (!uploadedSTL) {
-      setUploadedGeom(null)
+      setUploadedGeom((prev) => { prev?.dispose(); return null })
       setUploadedSTLBbox(null)
       return
     }
@@ -122,7 +122,7 @@ export function Part() {
       const maxDim = Math.max(size.x, size.y, size.z)
       const targetMax = 160
       if (maxDim > 0) nonIndexed.scale(targetMax / maxDim, targetMax / maxDim, targetMax / maxDim)
-      setUploadedGeom(nonIndexed)
+      setUploadedGeom((prev) => { prev?.dispose(); return nonIndexed })
     })
   }, [uploadedSTL, setUploadedSTLBbox, setPendingUploadAnalysis])
 
@@ -134,6 +134,11 @@ export function Part() {
     if (uploadedSTL) return []
     return getDashboardAnalysis(currentPartId)?.issues ?? []
   }, [uploadedSTL, currentPartId])
+
+  const pendingIssueIdx = useMemo(
+    () => (pendingFixId ? issues.findIndex((i) => i.id === pendingFixId) : -1),
+    [pendingFixId, issues]
+  )
 
   // Bake colors. Triangle-by-triangle:
   //  - default: Y-gradient base
@@ -221,6 +226,13 @@ export function Part() {
     vertexIssueIndex.current = issueIdx
   }, [geometry, issues, heatmapEnabled, fixedIssueIds, setPartBounds])
 
+  // Reset cursor if the component unmounts while the pointer is hovering.
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = ''
+    }
+  }, [])
+
   // Pulse the pending issue's vertices between severity color and green.
   useFrame(({ clock }) => {
     if (!pendingFixId) return
@@ -228,17 +240,16 @@ export function Part() {
     const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute | undefined
     if (!colorAttr) return
     const idx = vertexIssueIndex.current
-    const targetIssueIdx = issues.findIndex((i) => i.id === pendingFixId)
-    if (targetIssueIdx === -1) return
+    if (pendingIssueIdx === -1) return
 
-    const issue = issues[targetIssueIdx]
+    const issue = issues[pendingIssueIdx]
     const from = new THREE.Color(SEVERITY_HEX[issue.severity])
     const to = new THREE.Color(FIXED_HEX)
     const t = (Math.sin(clock.elapsedTime * 3) + 1) / 2 // 0..1
     const c = from.clone().lerp(to, t)
 
     for (let i = 0; i < idx.length; i++) {
-      if (idx[i] !== targetIssueIdx) continue
+      if (idx[i] !== pendingIssueIdx) continue
       colorAttr.setXYZ(i, c.r, c.g, c.b)
     }
     colorAttr.needsUpdate = true

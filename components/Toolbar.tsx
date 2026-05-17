@@ -3,6 +3,12 @@
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import {
   AlertTriangle,
   Box,
   ClipboardCheck,
@@ -42,6 +48,8 @@ export function Toolbar() {
     setCurrentPartId,
     setUploadedSTL,
     uploadedSTL,
+    setCustomPartSpec,
+    applyDesignProposal,
   } = useAppStore()
 
   const handleToggleManufacturing = () => {
@@ -108,35 +116,36 @@ export function Toolbar() {
 
       {/* Ribbon row — content driven by the active tab. */}
       <div className="flex items-stretch border-t border-zinc-800 bg-zinc-950/40 min-h-[88px]">
-        {activeTab === 'Part' && (
-          <PartRibbon
-            currentPartId={currentPartId as PartId}
-            uploadedSTL={uploadedSTL}
-            onSelectPart={(id) => {
-              setUploadedSTL(null)
-              setCurrentPartId(id)
-              toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
-            }}
-            onUploadClick={handleUploadClick}
-            onClearUpload={handleClearUpload}
-          />
-        )}
-        {activeTab === 'Evaluate' && <EvaluateRibbon />}
-        {activeTab === 'AI optimizations' && (
-          <MarkupRibbon
-            suggestions={aiPartSuggestions.items}
-            loading={aiPartSuggestions.loading}
-            onPreview={() => {
-              // Surface the AI panel so the user sees the full card +
-              // can Accept / Reject. The proposals shown in the ribbon
-              // are the same data as the panel's "Suggested optimizations".
-              setRightPanel('ai')
-              setRightCollapsed(false)
-            }}
-          />
-        )}
+        {/* Scrollable part — grows and scrolls so many AI parts never push demo buttons off-screen */}
+        <div className="flex-1 flex items-stretch overflow-x-auto min-w-0">
+          {activeTab === 'Part' && (
+            <PartRibbon
+              currentPartId={currentPartId as PartId}
+              uploadedSTL={uploadedSTL}
+              onSelectPart={(id) => {
+                setCustomPartSpec(null)
+                useResultsStore.getState().selectPart(id)
+                toast(getDashboardAnalysis(id)?.partName ?? id, { description: 'Loaded from part library.' })
+              }}
+              onUploadClick={handleUploadClick}
+              onClearUpload={handleClearUpload}
+            />
+          )}
+          {activeTab === 'Evaluate' && <EvaluateRibbon />}
+          {activeTab === 'AI optimizations' && (
+            <MarkupRibbon
+              suggestions={aiPartSuggestions.items}
+              loading={aiPartSuggestions.loading}
+              onAccept={applyDesignProposal}
+              onPreview={() => {
+                setRightPanel('ai')
+                setRightCollapsed(false)
+              }}
+            />
+          )}
+        </div>
 
-        {/* Persistent global actions — rendered as the rightmost ribbon group */}
+        {/* Persistent global actions — pinned to the right, never scrolled away */}
         <RibbonGroup bordered>
           <RibbonButton
             onClick={handleToggleManufacturing}
@@ -186,7 +195,17 @@ function PartRibbon({
 }) {
   const partIds = Object.keys(partsLibrary) as Array<Exclude<PartId, 'custom'>>
   const userParts = useAppStore((s) => s.userParts)
+  const removeUserPart = useAppStore((s) => s.removeUserPart)
   const selectUserPart = useResultsStore((s) => s.selectUserPart)
+
+  function handleDelete(id: string) {
+    removeUserPart(id)
+    // If the deleted part was active, fall back to the first demo part.
+    if (currentPartId === id) {
+      onSelectPart(partIds[0])
+    }
+  }
+
   return (
     <>
       <RibbonGroup bordered>
@@ -207,13 +226,26 @@ function PartRibbon({
       {userParts.length > 0 && (
         <RibbonGroup bordered>
           {userParts.map((part) => (
-            <RibbonButton
-              key={part.id}
-              icon={part.kind === 'ai-created' ? Sparkles : Upload}
-              label={part.label}
-              active={currentPartId === part.id}
-              onClick={() => void selectUserPart(part)}
-            />
+            <ContextMenu key={part.id}>
+              <ContextMenuTrigger asChild>
+                <span>
+                  <RibbonButton
+                    icon={part.kind === 'ai-created' ? Sparkles : Upload}
+                    label={part.label}
+                    active={currentPartId === part.id}
+                    onClick={() => void selectUserPart(part)}
+                  />
+                </span>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => handleDelete(part.id)}
+                >
+                  Delete "{part.label}"
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </RibbonGroup>
       )}
@@ -235,10 +267,12 @@ function PartRibbon({
 function MarkupRibbon({
   suggestions,
   loading,
+  onAccept,
   onPreview,
 }: {
   suggestions: DesignProposal[]
   loading: boolean
+  onAccept: (proposal: DesignProposal) => void
   onPreview: () => void
 }) {
   return (
@@ -250,7 +284,7 @@ function MarkupRibbon({
       )}
       {!loading && suggestions.length === 0 && (
         <span className="text-xs text-zinc-500 px-3 py-3 self-center">
-          No optimizations yet — open the AI panel to generate some
+          Ask the AI to suggest improvements — they&apos;ll appear here
         </span>
       )}
       {suggestions.map((s) => (
@@ -259,7 +293,13 @@ function MarkupRibbon({
           icon={Sparkles}
           label={s.title}
           active={s.status === 'accepted'}
-          onClick={() => onPreview()}
+          onClick={() => {
+            if (s.status === 'pending') {
+              onAccept(s)
+            } else {
+              onPreview()
+            }
+          }}
         />
       ))}
     </RibbonGroup>

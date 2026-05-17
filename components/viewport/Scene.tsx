@@ -120,7 +120,7 @@ export function Scene() {
 
         <Environment preset="city" />
 
-        <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
+        <GizmoHelper alignment="bottom-left" margin={[60, 100]}>
           <GizmoViewport
             labels={['X', 'Y', 'Z']}
             axisColors={['#ef4444', '#22c55e', '#3b82f6']}
